@@ -1,11 +1,11 @@
-from aiogram import Dispatcher, types, F
-from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters.state import State, StatesGroup
+from aiogram import Dispatcher, types, F, Bot
+from aiogram.types import Message
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from aiogram.filters.command import Command
-import time
 from config import TOKEN
 import re
 import asyncio
@@ -24,8 +24,7 @@ class ReportData:
         data['Прибытие на заявку'] = re.findall(r'прибытие на заявку (\d+)', text)[0]
         data['Комплекс'] = re.findall(r'комплекс (\w+-\w+)', text)[0]
         data['Время прибытия'] = re.findall(r'время прибытия (\d+ \d+)', text)[0]
-        predp_deistviya = re.findall(r'предпринятые действия (.+?) время убытия', text)
-        data['Предпринятые действия'] = predp_deistviya[0].split() if predp_deistviya else []
+        data['Предпринятые действия'] = re.findall(r'предпринятые действия (.+?) время убытия', text)
         data['Время убытия'] = re.findall(r'время убытия (\d+ \d+)', text)[0]
         data['Время пребывания на месте работы'] = re.findall(r'время пребывания на месте работы (\d+)', text)[0]
         data['Промежуточные показания одометра'] = re.findall(r'промежуточные показания одометра (\d+)', text)[0]
@@ -149,45 +148,50 @@ async def process_report_text(message: types.Message):
 class FillReport(StatesGroup):
     time_departure = State()  # Время выезда
     odometer_reading = State()  # Показания одометра
-    arrival_time = State()  # Прибытие на заявку
+    take_picture_new_odometer = State() #Фотография начального показателя одометра
+    arrival_object = State() # Номер или навание обьекта
+    arrival_time = State()  # Время прибытие на заявку
     actions_taken = State()  # Предпринятые действия
     departure_time = State()  # Время убытия
     time_spent = State()  # Время пребывания на месте работы
     intermediate_odometer = State()  # Промежуточные показания одометра
+    take_picture_intermediate_odometer = State()  # Фотография промежуточного показателя одометра
     final_odometer = State()  # Показания одометра
+    take_picture_final_odometer = State()  # Фотография финального показателя одометра
     total_distance = State()  # Пройдено расстояния всего
 
 
 # Обработчик для команды /fill_report, начинающей процесс заполнения отчета
-@dp.message(commands=['fill_report'])
-async def fill_report_start(message: types.Message):
+@dp.message(Command("fill_report"))
+async def fill_report_start(message: Message, state: FSMContext):
     # Очищаем состояние, если оно было сохранено
-    await FillReport.reset_state().set()
-    await message.reply("Введите время выезда (например, 'время выезда 9 35').")
+    await state.set_state(FillReport.time_departure)
+    await message.answer("Введите время выезда (например, '9 35').")
 
 
 # Обработчики для заполнения данных отчета
-@dp.message(state=FillReport.time_departure)
-async def process_time_departure(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-        data['time_departure'] = message.text
-    # Переходим к следующему состоянию
-    await FillReport.next()
-    await message.reply("Отправьте показания одометра (например, 'показания одометра 250465').")
+@dp.message(FillReport.time_departure)
+async def process_time_departure(message: Message, state: FSMContext):
+    await state.update_data(time_departure = message.text)
+    await state.set_state(FillReport.odometer_reading)
+    await message.answer("Отправьте показания одометра (например, '250465').")
 
 
-@dp.message(state=FillReport.odometer_reading)
-async def process_odometer_reading(message: types.Message, state: FSMContext):
-    async with state.proxy() as data:
-        data['odometer_reading'] = message.text
-    # Переходим к следующему состоянию
-    await FillReport.next()
+@dp.message(FillReport.odometer_reading)
+async def process_odometer_reading(message: Message, state: FSMContext):
+    await state.update_data(odometer_reading=message.text)
+    await state.set_state(FillReport.arrival_time)
     await message.reply(
-        "Отправьте время прибытия на заявку (например, 'прибытие на заявку 9 45 комплекс LBS11400-LBL11401').")
+        "Отправьте картинку с начальным показанием одометра")
+
+
+@dp.message(FillReport.take_picture_new_odometer, F.photo)
+async def process_picture_odometer1(message: Message, state: FSMContext):
+    await state.update_data(take_picture_new_odometer=message.photo[-1].file_id)
 
 
 @dp.message(state=FillReport.arrival_time)
-async def process_arrival_time(message: types.Message, state: FSMContext):
+async def process_arrival_time(message: Message, state: FSMContext):
     async with state.proxy() as data:
         data['arrival_time'] = message.text
     # Переходим к следующему состоянию
@@ -196,7 +200,7 @@ async def process_arrival_time(message: types.Message, state: FSMContext):
 
 
 @dp.message(state=FillReport.actions_taken)
-async def process_actions_taken(message: types.Message, state: FSMContext):
+async def process_actions_taken(message: Message, state: FSMContext):
     async with state.proxy() as data:
         data['actions_taken'] = message.text
     # Переходим к следующему состоянию
@@ -205,7 +209,7 @@ async def process_actions_taken(message: types.Message, state: FSMContext):
 
 
 @dp.message(state=FillReport.departure_time)
-async def process_departure_time(message: types.Message, state: FSMContext):
+async def process_departure_time(message: Message, state: FSMContext):
     async with state.proxy() as data:
         data['departure_time'] = message.text
     # Переходим к следующему состоянию
@@ -214,7 +218,7 @@ async def process_departure_time(message: types.Message, state: FSMContext):
 
 
 @dp.message(state=FillReport.intermediate_odometer)
-async def process_intermediate_odometer(message: types.Message, state: FSMContext):
+async def process_intermediate_odometer(message: Message, state: FSMContext):
     async with state.proxy() as data:
         data['intermediate_odometer'] = message.text
     # Переходим к следующему состоянию
@@ -224,7 +228,7 @@ async def process_intermediate_odometer(message: types.Message, state: FSMContex
 
 
 @dp.message(state=FillReport.final_odometer)
-async def process_final_odometer(message: types.Message, state: FSMContext):
+async def process_final_odometer(message: Message, state: FSMContext):
     async with state.proxy() as data:
         data['final_odometer'] = message.text
     # Переходим к следующему состоянию
@@ -233,8 +237,8 @@ async def process_final_odometer(message: types.Message, state: FSMContext):
 
 
 # Обработчик для завершения процесса и отправки текстового сообщения с данными
-@dp.message(state="*", commands=["done"])
-async def send_report(message: types.Message, state: FSMContext):
+@dp.message(Command("report_done"))
+async def send_report(message: Message, state: FSMContext):
     async with state.proxy() as data:
         # Создаем объект ReportData, используя данные из состояния
         report_data = ReportData(data)
@@ -243,7 +247,7 @@ async def send_report(message: types.Message, state: FSMContext):
             f"Отчет по АВР:\n"
             f"Время выезда: {report_data.data.get('time_departure', '')}\n"
             f"Показания одометра: {report_data.data.get('odometer_reading', '')}\n"
-            f"Прибытие на заявку: {report_data.data.get('arrival_time', '')} комплекс {report_data.data.get('arrival_complex', '')}\n"
+            f"Прибытие на заявку: {report_data.data.get('arrival_object', '')} комплекс {report_data.data.get('arrival_complex', '')}\n"
             f"Время прибытия: {report_data.data.get('arrival_time', '')}\n"
             f"Предпринятые действия: {report_data.data.get('actions_taken', '')}\n"
             f"Время убытия: {report_data.data.get('departure_time', '')}\n"
@@ -258,21 +262,19 @@ async def send_report(message: types.Message, state: FSMContext):
     await state.finish()
 
 
+@dp.message()
+async def echo(message: Message):
+    await message.answer(f"Я тебя не понимаю!")
+
+
 # Запуск бота
 async def main():
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 
 if __name__ == '__main__':
-    while True:
-        try:
-            try:
-                asyncio.run(main())
-                time.sleep(5)
-            except Exception as e:
-                print(f"Произошла ошибка: {e}")
-                time.sleep(5)
-        except KeyboardInterrupt:
-            print("Завершение выполнения")
+    asyncio.run(main())
+
 
 
