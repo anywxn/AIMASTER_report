@@ -12,26 +12,93 @@ import asyncio
 import datetime
 
 
+def find_first_match(pattern, text, default="Нет данных"):
+    matches = re.findall(pattern, text)
+    return matches[0] if matches else default
+
+
 class ReportData:
-    def __init__(self, text):
-        self.data = {}
-        self.extract_data(text)
+    def __init__(self):
+        self.time_departure = None
+        self.odometer_reading = None
+        self.take_picture_new_odometer = None
+        self.arrival_object = None
+        self.arrival_complex = None
+        self.arrival_time = None
+        self.actions_taken = None
+        self.departure_time = None
+        self.intermediate_odometer = None
+        self.take_picture_intermediate_odometer = None
+        self.final_odometer = None
+        self.total_distance = None
+        self.time_spent = None
 
-    def extract_data(self, text):
-        data = {}
-        data['Время выезда'] = re.findall(r'время выезда (\d+ \d+)', text)[0]
-        data['Показания одометра'] = re.findall(r'показания одометра (\d+)', text)[0]
-        data['Прибытие на заявку'] = re.findall(r'прибытие на заявку (\d+)', text)[0]
-        data['Комплекс'] = re.findall(r'комплекс (\w+-\w+)', text)[0]
-        data['Время прибытия'] = re.findall(r'время прибытия (\d+ \d+)', text)[0]
-        data['Предпринятые действия'] = re.findall(r'предпринятые действия (.+?) время убытия', text)
-        data['Время убытия'] = re.findall(r'время убытия (\d+ \d+)', text)[0]
-        data['Время пребывания на месте работы'] = re.findall(r'время пребывания на месте работы (\d+)', text)[0]
-        data['Промежуточные показания одометра'] = re.findall(r'промежуточные показания одометра (\d+)', text)[0]
-        data['Показания одометра'] = re.findall(r'показания одометра (\d+)', text)[1]
-        data['Пройдено расстояния всего'] = re.findall(r'пройдено расстояния всего (\d+)', text)[0]
+    def fill_report(self, data):
+        # Обновляем данные только если они присутствуют в переданном словаре
+        if 'time_departure' in data:
+            self.time_departure = data['time_departure']
+        if 'odometer_reading' in data:
+            self.odometer_reading = data['odometer_reading']
+        if 'take_picture_new_odometer' in data:
+            self.take_picture_new_odometer = data['take_picture_new_odometer']
+        if 'arrival_object' in data:
+            self.arrival_object = data['arrival_object']
+        if 'arrival_complex' in data:
+            self.arrival_complex = data['arrival_complex']
+        if 'arrival_time' in data:
+            self.arrival_time = data['arrival_time']
+        if 'actions_taken' in data:
+            self.actions_taken = data['actions_taken']
+        if 'departure_time' in data:
+            self.departure_time = data['departure_time']
+        if 'intermediate_odometer' in data:
+            self.intermediate_odometer = data['intermediate_odometer']
+        if 'take_picture_intermediate_odometer' in data:
+            self.take_picture_intermediate_odometer = data['take_picture_intermediate_odometer']
+        if 'final_odometer' in data:
+            self.final_odometer = data['final_odometer']
 
-        self.data = data
+    def get_report(self):
+        # Возвращает отчет в виде словаря
+        return {
+            'time_departure': self.time_departure,
+            'odometer_reading': self.odometer_reading,
+            'take_picture_new_odometer': self.take_picture_new_odometer,
+            'arrival_object': self.arrival_object,
+            'arrival_complex': self.arrival_complex,
+            'arrival_time': self.arrival_time,
+            'actions_taken': self.actions_taken,
+            'departure_time': self.departure_time,
+            'intermediate_odometer': self.intermediate_odometer,
+            'take_picture_intermediate_odometer': self.take_picture_intermediate_odometer,
+            'final_odometer': self.final_odometer
+            # Добавьте остальные переменные, если есть
+        }
+
+
+def total_distance(start_reading, end_reading):
+    print("Start reading:", start_reading)
+    print("End reading:", end_reading)
+    try:
+        return int(end_reading) - int(start_reading)
+    except (TypeError, ValueError):
+        return None
+
+
+def time_odds(start_time, end_time):
+    print("Start time:", start_time)
+    print("End time:", end_time)
+    try:
+        start_hour, start_minute = map(int, start_time.split())
+        end_hour, end_minute = map(int, end_time.split())
+        total_hours = end_hour - start_hour
+        total_minutes = end_minute - start_minute
+        if total_minutes < 0:
+            total_hours -= 1
+            total_minutes += 60
+        return f"{total_hours} часов {total_minutes} минут"
+    except (AttributeError, ValueError, TypeError):
+        return None
 
 
 def create_report(report_data, report_date):
@@ -126,7 +193,7 @@ async def send_welcome(message: types.Message):
 
 
 # Обработчик текстового сообщения с данными для отчета
-@dp.message(F.text)
+@dp.message(Command("Text"))
 async def process_report_text(message: types.Message):
     text = message.text
     report_data = ReportData(text)
@@ -149,22 +216,24 @@ class FillReport(StatesGroup):
     time_departure = State()  # Время выезда
     odometer_reading = State()  # Показания одометра
     take_picture_new_odometer = State() #Фотография начального показателя одометра
-    arrival_object = State() # Номер или навание обьекта
+    arrival_object = State() #Номер заявки
+    arrival_complex = State() # Номер или навание обьекта
     arrival_time = State()  # Время прибытие на заявку
     actions_taken = State()  # Предпринятые действия
     departure_time = State()  # Время убытия
-    time_spent = State()  # Время пребывания на месте работы
     intermediate_odometer = State()  # Промежуточные показания одометра
     take_picture_intermediate_odometer = State()  # Фотография промежуточного показателя одометра
     final_odometer = State()  # Показания одометра
     take_picture_final_odometer = State()  # Фотография финального показателя одометра
-    total_distance = State()  # Пройдено расстояния всего
+    total_distance = State() # Пройдено км
+    time_spent = State() # проведено времени на объекте
 
 
 # Обработчик для команды /fill_report, начинающей процесс заполнения отчета
 @dp.message(Command("fill_report"))
 async def fill_report_start(message: Message, state: FSMContext):
     # Очищаем состояние, если оно было сохранено
+    await state.clear()
     await state.set_state(FillReport.time_departure)
     await message.answer("Введите время выезда (например, '9 35').")
 
@@ -172,99 +241,129 @@ async def fill_report_start(message: Message, state: FSMContext):
 # Обработчики для заполнения данных отчета
 @dp.message(FillReport.time_departure)
 async def process_time_departure(message: Message, state: FSMContext):
-    await state.update_data(time_departure = message.text)
+    await state.update_data(time_departure=message.text)
     await state.set_state(FillReport.odometer_reading)
-    await message.answer("Отправьте показания одометра (например, '250465').")
+    await message.answer("Отправьте показания одометра (например, '250465' обязательно 6 знаков).")
 
 
 @dp.message(FillReport.odometer_reading)
 async def process_odometer_reading(message: Message, state: FSMContext):
     await state.update_data(odometer_reading=message.text)
-    await state.set_state(FillReport.arrival_time)
-    await message.reply(
-        "Отправьте картинку с начальным показанием одометра")
+    await state.set_state(FillReport.take_picture_new_odometer)
+    await message.answer(
+        "Отправьте фотографию с начальным показанием одометра")
 
 
 @dp.message(FillReport.take_picture_new_odometer, F.photo)
 async def process_picture_odometer1(message: Message, state: FSMContext):
     await state.update_data(take_picture_new_odometer=message.photo[-1].file_id)
+    await state.set_state(FillReport.arrival_object)
+    await message.answer(
+        "Отправьте номер заявки (например, '176085').")
 
 
-@dp.message(state=FillReport.arrival_time)
+@dp.message(FillReport.arrival_object)
+async def process_arrival_object(message: Message, state: FSMContext):
+    await state.update_data(arrival_object=message.text)
+    await state.set_state(FillReport.arrival_complex)
+    await message.answer(
+        "Отправьте название объекта или "
+        "комплекса (например,'LBS11400-LBL11401').")
+
+
+@dp.message(FillReport.arrival_complex)
+async def process_arrival_complex(message: Message, state: FSMContext):
+    await state.update_data(arrival_complex=message.text)
+    await state.set_state(FillReport.arrival_time)
+    await message.answer(
+        "Отправьте время прибытия на объект (например, '10 15').")
+
+
+@dp.message(FillReport.arrival_time)
 async def process_arrival_time(message: Message, state: FSMContext):
-    async with state.proxy() as data:
-        data['arrival_time'] = message.text
-    # Переходим к следующему состоянию
-    await FillReport.next()
-    await message.reply("Отправьте время прибытия на объект (например, 'время прибытия 10 15').")
+    await state.update_data(arrival_time=message.text)
+    await state.set_state(FillReport.actions_taken)
+    await message.answer(
+        "Отправьте предпринятые действия (например, 'перенастройка, перезапуск комплекса').")
 
 
-@dp.message(state=FillReport.actions_taken)
+@dp.message(FillReport.actions_taken)
 async def process_actions_taken(message: Message, state: FSMContext):
-    async with state.proxy() as data:
-        data['actions_taken'] = message.text
-    # Переходим к следующему состоянию
-    await FillReport.next()
-    await message.reply("Отправьте время убытия (например, 'время убытия 12 30').")
+    await state.update_data(actions_taken=message.text)
+    await state.set_state(FillReport.departure_time)
+    await message.answer(
+        "Отправьте время убытия (например, '12 30').")
 
 
-@dp.message(state=FillReport.departure_time)
+@dp.message(FillReport.departure_time)
 async def process_departure_time(message: Message, state: FSMContext):
-    async with state.proxy() as data:
-        data['departure_time'] = message.text
-    # Переходим к следующему состоянию
-    await FillReport.next()
-    await message.reply("Отправьте время пребывания на месте работы (например, 'время пребывания на месте работы 2').")
+    await state.update_data(departure_time=message.text)
+    await state.set_state(FillReport.intermediate_odometer)
+    await message.answer(
+        "Отправьте промежуточные показания одометра (например, '250556' обязательно 6 знаков).")
 
 
-@dp.message(state=FillReport.intermediate_odometer)
+@dp.message(FillReport.intermediate_odometer)
 async def process_intermediate_odometer(message: Message, state: FSMContext):
-    async with state.proxy() as data:
-        data['intermediate_odometer'] = message.text
-    # Переходим к следующему состоянию
-    await FillReport.next()
-    await message.reply(
-        "Отправьте промежуточные показания одометра (например, 'промежуточные показания одометра 250556').")
+    await state.update_data(intermediate_odometer=message.text)
+    await state.set_state(FillReport.take_picture_intermediate_odometer)
+    await message.answer(
+        "Отправьте фотографию с промежуточными показаниями одометра.")
 
 
-@dp.message(state=FillReport.final_odometer)
+@dp.message(FillReport.take_picture_intermediate_odometer, F.photo)
+async def process_picture_odometer2(message: Message, state: FSMContext):
+    await state.update_data(take_picture_intermediate_odometer=message.photo[-1].file_id)
+    await state.set_state(FillReport.final_odometer)
+    await message.answer(
+        "Отправьте конечные показания одометра (например, '250556' обязательно 6 знаков).")
+
+
+@dp.message(FillReport.final_odometer)
 async def process_final_odometer(message: Message, state: FSMContext):
-    async with state.proxy() as data:
-        data['final_odometer'] = message.text
-    # Переходим к следующему состоянию
-    await FillReport.next()
-    await message.reply("Отправьте пройденное расстояние всего (например, 'пройдено расстояния всего 182').")
+    await state.update_data(final_odometer=message.text)
+    await state.set_state(FillReport.take_picture_final_odometer)
+    await message.answer(
+        "Отправьте фотографию с конечными показаниями одометра.")
 
 
-# Обработчик для завершения процесса и отправки текстового сообщения с данными
-@dp.message(Command("report_done"))
-async def send_report(message: Message, state: FSMContext):
-    async with state.proxy() as data:
-        # Создаем объект ReportData, используя данные из состояния
-        report_data = ReportData(data)
-        # Формируем текст сообщения
-        report_text = (
-            f"Отчет по АВР:\n"
-            f"Время выезда: {report_data.data.get('time_departure', '')}\n"
-            f"Показания одометра: {report_data.data.get('odometer_reading', '')}\n"
-            f"Прибытие на заявку: {report_data.data.get('arrival_object', '')} комплекс {report_data.data.get('arrival_complex', '')}\n"
-            f"Время прибытия: {report_data.data.get('arrival_time', '')}\n"
-            f"Предпринятые действия: {report_data.data.get('actions_taken', '')}\n"
-            f"Время убытия: {report_data.data.get('departure_time', '')}\n"
-            f"Время пребывания на месте работы: {report_data.data.get('time_spent', '')} часа\n"
-            f"Промежуточные показания одометра: {report_data.data.get('intermediate_odometer', '')}\n"
-            f"Показания одометра: {report_data.data.get('final_odometer', '')}\n"
-            f"Пройдено расстояния всего: {report_data.data.get('total_distance', '')} км."
-        )
-        # Отправляем сообщение с данными
-        await message.reply(report_text)
-    # Сбрасываем состояние
-    await state.finish()
+@dp.message(FillReport.take_picture_final_odometer, F.photo)
+async def process_picture_odometer3(message: Message, state: FSMContext):
+    # Получаем данные из контекста состояния
+    state_data = await state.get_data()
+    print("State data:", state_data)  # Выводим содержимое state_data
+    # Обновляем данные состояния
+    await state.update_data(take_picture_final_odometer=message.photo[-1].file_id)
+    await state.update_data(total_distance=total_distance(
+        state_data.get('odometer_reading'),
+        state_data.get('final_odometer')
+    ))
+    await state.update_data(time_spent=time_odds(
+        state_data.get('arrival_time'),
+        state_data.get('departure_time')
+    ))
+    # Получаем обновленные данные
+    data = await state.get_data()
+    await state.clear()
+    # Создаем объект отчета и формируем текст сообщения
+    report_data = ReportData()
+    report_data.fill_report(data)
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent} часа\n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км."
+    )
+    # Отправляем сообщение с данными
+    await message.answer(report_text)
 
-
-@dp.message()
-async def echo(message: Message):
-    await message.answer(f"Я тебя не понимаю!")
 
 
 # Запуск бота
