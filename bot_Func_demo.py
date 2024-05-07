@@ -86,6 +86,14 @@ def total_distance(start_reading, end_reading):
 
 
 def time_odds(start_time, end_time):
+    def plural_form(number, one, two, five):
+        if number % 10 == 1 and number % 100 != 11:
+            return one
+        elif 2 <= number % 10 <= 4 and (number % 100 < 10 or number % 100 >= 20):
+            return two
+        else:
+            return five
+
     print("Start time:", start_time)
     print("End time:", end_time)
     try:
@@ -96,7 +104,11 @@ def time_odds(start_time, end_time):
         if total_minutes < 0:
             total_hours -= 1
             total_minutes += 60
-        return f"{total_hours} часов {total_minutes} минут"
+
+        hour_str = plural_form(total_hours, "час", "часа", "часов")
+        minute_str = plural_form(total_minutes, "минута", "минуты", "минут")
+
+        return f"{total_hours} {hour_str} {total_minutes} {minute_str}"
     except (AttributeError, ValueError, TypeError):
         return None
 
@@ -334,19 +346,18 @@ async def process_picture_odometer3(message: Message, state: FSMContext):
     print("State data:", state_data)  # Выводим содержимое state_data
     # Обновляем данные состояния
     await state.update_data(take_picture_final_odometer=message.photo[-1].file_id)
-    await state.update_data(total_distance=total_distance(
-        state_data.get('odometer_reading'),
-        state_data.get('final_odometer')
-    ))
-    await state.update_data(time_spent=time_odds(
-        state_data.get('arrival_time'),
-        state_data.get('departure_time')
-    ))
     # Получаем обновленные данные
     data = await state.get_data()
-    await state.clear()
     # Создаем объект отчета и формируем текст сообщения
     report_data = ReportData()
+    report_data.time_spent = time_odds(
+        state_data.get('arrival_time'),
+        state_data.get('departure_time')
+    )
+    report_data.total_distance = total_distance(
+        state_data.get('odometer_reading'),
+        state_data.get('final_odometer')
+    )
     report_data.fill_report(data)
     report_text = (
         f"Отчет по АВР:\n"
@@ -363,7 +374,7 @@ async def process_picture_odometer3(message: Message, state: FSMContext):
     )
     # Отправляем сообщение с данными
     await message.answer(report_text)
-
+    await state.clear()
 
 
 # Запуск бота

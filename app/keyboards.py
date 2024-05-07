@@ -1,59 +1,25 @@
-def time_odds(time1, time2):
-    hour1, min1 = map(int, time1.split())
-    hour2, min2 = map(int, time2.split())
-    all_min1 = (hour1 * 60) + min1
-    all_min2 = (hour2 * 60) + min2
-    odd_min = abs(all_min2 - all_min1)
-    hour = odd_min // 60
-    min = odd_min % 60
-    formated_hour = "{:02d}".format(hour)
-    formated_min = "{:02d}".format(min)
-    full_time = f"{formated_hour}  {formated_min}"
-    return full_time
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup
+)
 
 
-def разница_времени(время1, время2):
-    # Разбиваем строки на часы и минуты
-    часы1, минуты1 = map(int, время1.split())
-    часы2, минуты2 = map(int, время2.split())
-
-    # Переводим оба времени в минуты
-    всего_минут1 = часы1 * 60 + минуты1
-    всего_минут2 = часы2 * 60 + минуты2
-
-    # Вычисляем разницу в минутах
-    разница_в_минутах = abs(всего_минут2 - всего_минут1)
-
-    # Переводим разницу в часы и минуты
-    часы = разница_в_минутах // 60
-    минуты = разница_в_минутах % 60
-
-    форматированные_часы = "{:02d}".format(часы)
-    форматированные_минуты = "{:02d}".format(минуты)
-
-    return форматированные_часы, форматированные_минуты
-
-# Пример использования функции
-время1 = "09 35"
-время2 = "12 30"
-print(time_odds(время1, время2))
-прошло_часов, прошло_минут = разница_времени(время1, время2)
-print(f"Прошло {прошло_часов} часов и {прошло_минут} минут.")
-
-
-def total_distance(odometer1, odometer2):
-    # Преобразуем показания в числа
-    odometer1 = int(odometer1)
-    odometer2 = int(odometer2)
-
-    # Вычисляем разницу между показаниями
-    odd = odometer2 - odometer1
-
-    return f"{odd} километров"
-
-
-# Пример использования функции
-показание1 = "123456"
-показание2 = "123460"
-результат = total_distance(показание1, показание2)
-print("Пройденное расстояние:", результат)
+def generate_edit_keyboard():
+    edit_buttons = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+               InlineKeyboardButton(text="Изменить время выезда", callback_data="edit_time_departure"),
+               InlineKeyboardButton(text="Изменить значение начального одометра", callback_data="edit_odometer_reading"),
+               InlineKeyboardButton(text="Изменить фото начального одометра", callback_data="edit_picture_new_odometer"),
+               InlineKeyboardButton(text="Изменить номер заявки", callback_data="edit_arrival_object"),
+               InlineKeyboardButton(text="Изменить название комплекса", callback_data="edit_arrival_complex"),
+               InlineKeyboardButton(text="Изменить время прибытия на объект", callback_data="edit_arrival_time"),
+               InlineKeyboardButton(text="Изменить действия", callback_data="edit_actions_taken"),
+               InlineKeyboardButton(text="Изменить время убытия", callback_data="edit_departure_time"),
+               InlineKeyboardButton(text="Изменить значения промеж. одометра", callback_data="edit_intermediate_odometer"),
+               InlineKeyboardButton(text="Изменить фото промеж. одометра", callback_data="edit_picture_intermediate_odometer"),
+               InlineKeyboardButton(text="Изменить конечное значение одометра", callback_data="edit_final_odometer"),
+               InlineKeyboardButton(text="Изменить фото конечного одометра", callback_data="edit_picture_final_odometer"),
+            ]
+        ]
+    )
