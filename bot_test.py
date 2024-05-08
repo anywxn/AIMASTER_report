@@ -4,6 +4,7 @@ from config import TOKEN
 import logging
 from aiogram import Bot, Dispatcher, types, F
 from app.handlers import handle_voice, router
+from app.fill_report import routers
 
 # Инициализация бота и диспетчера
 bot = Bot(token=TOKEN)
@@ -14,12 +15,15 @@ logging.basicConfig(level=logging.INFO)
 
 async def main():
     dp.include_router(router)
+    dp.include_router(routers)
+    await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 
 
-@router.message(F.voice)
+@routers.message(F.voice)
 async def handle_voice_wrapper(message: types.Message):
     await handle_voice(message, bot=bot)
+
 
 # Запуск бота
 if __name__ == '__main__':

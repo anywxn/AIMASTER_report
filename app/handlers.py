@@ -12,66 +12,6 @@ from datetime import datetime
 router = Router()
 
 
-input_keywords = ["объект", "работа", "начальный", "конечный"]
-
-
-class TextProcessor:
-    def __init__(self, text, keywords):
-        self.text = text
-        self.keywords = keywords
-        self.data = {
-            "Объект": None,
-            "Работа": None,
-            "Начальный пробег": None,
-            "Конечный пробег": None
-        }
-
-    def process_text(self):
-        words = self.text.split()
-        i = 0
-        while i < len(words):
-            word = words[i]
-            if word.lower() in self.keywords:
-                if word.lower() == "начальный":
-                    j = i + 1
-                    while j < len(words):
-                        if words[j].isdigit():
-                            self.data["Начальный пробег"] = words[j]
-                            break
-                        j += 1
-                elif word.lower() == "конечный":
-                    j = i + 1
-                    while j < len(words):
-                        if words[j].isdigit():
-                            self.data["Конечный пробег"] = words[j]
-                            break
-                        j += 1
-                else:
-                    current_key = word.capitalize()
-                    current_value = " ".join(words[i + 1:]).strip()
-                    next_keyword_index = len(words)  # По умолчанию, следующее ключевое слово - последнее слово в тексте
-                    for keyword in self.keywords:
-                        if keyword in words[i+1:]:
-                            next_keyword_index = min(next_keyword_index, words[i+1:].index(keyword) + i + 1)
-                    current_value = " ".join(words[i + 1:next_keyword_index]).strip()
-                    self.data[current_key] = current_value
-                    i = next_keyword_index - 1  # Устанавливаем индекс i на следующее ключевое слово
-            i += 1
-
-    def generate_report(self):
-        report = "Отчет:\n"
-        for key, value in self.data.items():
-            if value is not None:
-                report += f"{key}: {value}\n"
-        return report.strip()
-
-    def save_to_word(self, filename):
-        doc = Document()
-        report = self.generate_report()
-        doc.add_paragraph(report)
-        doc.save(filename)
-
-
 # Функция для распознавания речи
 def recognize_speech(phrase_wav_path):
     r = sr.Recognizer()
@@ -136,22 +76,6 @@ async def handle_voice(message: types.Message, bot=None):
 
     # Получаем текущую дату
     current_date = datetime.now().strftime("%Y-%m-%d")
-
-    # Создаем экземпляр TextProcessor и обрабатываем распознанный текст
-    report_text = TextProcessor(recognized_text, input_keywords)
-    report_text.process_text()
-
-    # Получаем значение поля "Объект" из TextProcessor
-    object_name = report_text.data["Объект"]
-
-    # Составляем имя файла с текущей датой и значением поля "Объект"
-    file_name_docx = f"./docs/{object_name}_{current_date}_отчет.docx"
-
-    # Сохраняем отчет в документ Word
-    report_text.save_to_word(file_name_docx)
-
-    # Отправляем отчет пользователю
-    await message.reply(report_text.generate_report(), parse_mode="html")
 
     # Отправляем файл в формате документа
     document = FSInputFile(path=file_name_docx)
