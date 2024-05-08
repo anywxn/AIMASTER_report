@@ -37,28 +37,8 @@ class ReportData:
 
     def fill_report(self, data):
         # Обновляем данные только если они присутствуют в переданном словаре
-        if 'time_departure' in data:
-            self.time_departure = data['time_departure']
-        if 'odometer_reading' in data:
-            self.odometer_reading = data['odometer_reading']
-        if 'take_picture_new_odometer' in data:
-            self.take_picture_new_odometer = data['take_picture_new_odometer']
-        if 'arrival_object' in data:
-            self.arrival_object = data['arrival_object']
-        if 'arrival_complex' in data:
-            self.arrival_complex = data['arrival_complex']
-        if 'arrival_time' in data:
-            self.arrival_time = data['arrival_time']
-        if 'actions_taken' in data:
-            self.actions_taken = data['actions_taken']
-        if 'departure_time' in data:
-            self.departure_time = data['departure_time']
-        if 'intermediate_odometer' in data:
-            self.intermediate_odometer = data['intermediate_odometer']
-        if 'take_picture_intermediate_odometer' in data:
-            self.take_picture_intermediate_odometer = data['take_picture_intermediate_odometer']
-        if 'final_odometer' in data:
-            self.final_odometer = data['final_odometer']
+        for key, value in data.items():
+            setattr(self, key, value)
 
     def get_report(self):
         # Возвращает отчет в виде словаря
@@ -77,6 +57,9 @@ class ReportData:
             'take_picture_final_odometer': self.take_picture_final_odometer,
             # Добавьте остальные переменные, если есть
         }
+
+
+user_report_data = {}
 
 
 def total_distance(start_reading, end_reading):
@@ -331,15 +314,18 @@ async def process_final_odometer(message: Message, state: FSMContext):
 
 @routers.message(FillReport.take_picture_final_odometer, F.photo)
 async def process_picture_odometer3(message: Message, state: FSMContext):
-    # Получаем данные из контекста состояния
-    state_data = await state.get_data()
-    print("State data:", state_data)  # Выводим содержимое state_data
-    # Обновляем данные состояния
+    global user_report_data  # Объявляем глобальную переменную
+    user_id = message.from_user.id  # Получаем ID пользователя
+    state_data = await state.get_data()  # Получаем данные из состояния FSM
+
+    # Обновляем состояние FSM с идентификатором файла фотографии
     await state.update_data(take_picture_final_odometer=message.photo[-1].file_id)
-    # Получаем обновленные данные
-    data = await state.get_data()
-    # Создаем объект отчета и формируем текст сообщения
-    report_data = ReportData()
+
+    # Получаем или создаем объект ReportData для пользователя
+    report_data = user_report_data.setdefault(user_id, ReportData())
+
+    # Обновляем объект ReportData полученными данными
+    report_data.take_picture_final_odometer = message.photo[-1].file_id
     report_data.time_spent = time_odds(
         state_data.get('arrival_time'),
         state_data.get('departure_time')
@@ -348,7 +334,7 @@ async def process_picture_odometer3(message: Message, state: FSMContext):
         state_data.get('odometer_reading'),
         state_data.get('final_odometer')
     )
-    report_data.fill_report(data)
+    report_data.fill_report(state_data)
     report_text = (
         f"Отчет по АВР:\n"
         f"Время выезда: {report_data.time_departure}\n"
@@ -357,12 +343,11 @@ async def process_picture_odometer3(message: Message, state: FSMContext):
         f"Время прибытия: {report_data.arrival_time}\n"
         f"Предпринятые действия: {report_data.actions_taken}\n"
         f"Время убытия: {report_data.departure_time}\n"
-        f"Время пребывания на месте работы: {report_data.time_spent} часа\n"
+        f"Время пребывания на месте работы: {report_data.time_spent}\n"
         f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
         f"Показания одометра: {report_data.final_odometer}\n"
         f"Пройдено расстояния всего: {report_data.total_distance} км."
     )
-    # Отправляем сообщение с данными
     await message.answer(report_text, reply_markup=main_kb)
     await state.clear()
 
@@ -379,12 +364,11 @@ async def start_edit_time_departure(message: Message, state: FSMContext):
 
 @routers.message(EditTimeDeparture.time_departure)
 async def finish_edit_time_departure(message: Message, state: FSMContext):
-    await state.update_data(time_departure=message.text)
-    data = await state.get_data()
-    report_data = ReportData()  # Создаем объект класса ReportData
-    report_data.fill_report(data)
-
-    report_data.fill_report(data)
+    global user_report_data  # Указываем, что используем глобальную переменную
+    user_id = message.from_user.id
+    # Получаем данные пользователя из словаря. Если они уже есть, используем их, иначе создаем новые.
+    report_data = user_report_data.setdefault(user_id, ReportData())
+    report_data.time_departure = message.text
     report_text = (
         f"Отчет по АВР:\n"
         f"Время выезда: {report_data.time_departure}\n"
@@ -393,11 +377,346 @@ async def finish_edit_time_departure(message: Message, state: FSMContext):
         f"Время прибытия: {report_data.arrival_time}\n"
         f"Предпринятые действия: {report_data.actions_taken}\n"
         f"Время убытия: {report_data.departure_time}\n"
-        f"Время пребывания на месте работы: {report_data.time_spent} часа\n"
+        f"Время пребывания на месте работы: {report_data.time_spent} \n"
         f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
         f"Показания одометра: {report_data.final_odometer}\n"
         f"Пройдено расстояния всего: {report_data.total_distance} км."
     )
-    # Отправляем сообщение с данными
+    # Отправляем обновленный отчет
     await message.answer(report_text, reply_markup=main_kb)
-    state.clear()
+    # Очищаем состояние
+    await state.clear()
+
+
+class EditOdometerReading(StatesGroup):
+    odometer_reading = State()
+
+
+@routers.message(F.text.lower() == "изменить значение начального одометра")
+async def start_edit_odometer_reading(message: Message, state: FSMContext):
+    await state.set_state(EditOdometerReading.odometer_reading)
+    await message.answer("Введите новое значение начального одометра")
+
+
+@routers.message(EditOdometerReading.odometer_reading)
+async def finish_edit_odometer_reading(message: Message, state: FSMContext):
+    global user_report_data  # Указываем, что используем глобальную переменную
+    user_id = message.from_user.id
+    # Получаем данные пользователя из словаря. Если они уже есть, используем их, иначе создаем новые.
+    report_data = user_report_data.setdefault(user_id, ReportData())
+    report_data.odometer_reading = message.text  # Изменяем время выезда
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent} \n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км."
+    )
+    await message.answer(report_text, reply_markup=main_kb)
+    await state.clear()
+
+
+class EditOdometerReadingPicture(StatesGroup):
+    take_picture_new_odometer = State()
+
+
+@routers.message(F.text.lower() == "изменить фото начального одометра")
+async def start_edit_picture_odometer(message: Message, state: FSMContext):
+    await state.set_state(EditOdometerReadingPicture.take_picture_new_odometer)
+    await message.answer("Отправьте новое фото с начальным одометром")
+
+
+@routers.message(EditOdometerReadingPicture.take_picture_new_odometer, F.photo)
+async def finish_edit_picture_odometer(message: Message, state: FSMContext):
+    global user_report_data  # Указываем, что используем глобальную переменную
+    user_id = message.from_user.id
+    report_data = user_report_data.setdefault(user_id, ReportData())
+    report_data.take_picture_new_odometer = message.photo[-1].file_id
+    await message.answer("Фото изменено, результат будет в документе!", reply_markup=main_kb)
+    await state.clear()
+
+
+class EditArrivalObject(StatesGroup):
+    arrival_object = State()
+
+
+@routers.message(F.text.lower() == "изменить номер заявки")
+async def start_edit_arrival_object(message: Message, state: FSMContext):
+    await state.set_state(EditArrivalObject.arrival_object)
+    await message.answer("Введите новый номер заявки")
+
+
+@routers.message(EditArrivalObject.arrival_object)
+async def finish_edit_arrival_object(message: Message, state: FSMContext):
+    global user_report_data  # Указываем, что используем глобальную переменную
+    user_id = message.from_user.id
+    report_data = user_report_data.setdefault(user_id, ReportData())
+    report_data.arrival_object = message.text
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent} \n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км."
+    )
+    await message.answer(report_text, reply_markup=main_kb)
+    await state.clear()
+
+
+class EditArrivalComplex(StatesGroup):
+    arrival_complex = State()
+
+
+@routers.message(F.text.lower() == "изменить название комплекса")
+async def start_edit_arrival_complex(message: Message, state: FSMContext):
+    await state.set_state(EditArrivalComplex.arrival_complex)
+    await message.answer("Введите новое название комплекса")
+
+
+@routers.message(EditArrivalComplex.arrival_complex)
+async def finish_edit_arrival_complex(message: Message, state: FSMContext):
+    global user_report_data  # Указываем, что используем глобальную переменную
+    user_id = message.from_user.id
+    report_data = user_report_data.setdefault(user_id, ReportData())
+    report_data.arrival_object = message.text
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent} \n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км."
+    )
+    await message.answer(report_text, reply_markup=main_kb)
+    await state.clear()
+
+
+class EditArrivalTime(StatesGroup):
+    arrival_time = State()
+
+
+@routers.message(F.text.lower() == "изменить время прибытия на объект")
+async def start_edit_arrival_time(message: Message, state: FSMContext):
+    await state.set_state(EditArrivalTime.arrival_time)
+    await message.answer("Введите новое время прибытия на объект")
+
+
+@routers.message(EditArrivalTime.arrival_time)
+async def finish_edit_arrival_time(message: Message, state: FSMContext):
+    global user_report_data  # Указываем, что используем глобальную переменную
+    user_id = message.from_user.id
+    report_data = user_report_data.setdefault(user_id, ReportData())
+    report_data.arrival_time = message.text
+    report_data.time_spent = time_odds(
+        report_data.arrival_time,
+        report_data.departure_time
+    )
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent} \n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км."
+    )
+    await message.answer(report_text, reply_markup=main_kb)
+    await state.clear()
+
+
+class EditActionsTaken(StatesGroup):
+    actions_taken = State()
+
+
+@routers.message(F.text.lower() == "изменить действия")
+async def start_edit_actions_taken(message: Message, state: FSMContext):
+    await state.set_state(EditActionsTaken.actions_taken)
+    await message.answer("Введите предпринятые действия")
+
+
+@routers.message(EditActionsTaken.actions_taken)
+async def finish_edit_actions_taken(message: Message, state: FSMContext):
+    global user_report_data  # Указываем, что используем глобальную переменную
+    user_id = message.from_user.id
+    report_data = user_report_data.setdefault(user_id, ReportData())
+    report_data.actions_taken = message.text
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent} \n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км."
+    )
+    await message.answer(report_text, reply_markup=main_kb)
+    await state.clear()
+
+
+class EditDepartureTime(StatesGroup):
+    departure_time = State()
+
+
+@routers.message(F.text.lower() == "изменить время убытия")
+async def start_edit_departure_time(message: Message, state: FSMContext):
+    await state.set_state(EditDepartureTime.departure_time)
+    await message.answer("Введите новое время убытия с объекта")
+
+
+@routers.message(EditDepartureTime.departure_time)
+async def finish_edit_departure_time(message: Message, state: FSMContext):
+    global user_report_data  # Указываем, что используем глобальную переменную
+    user_id = message.from_user.id
+    report_data = user_report_data.setdefault(user_id, ReportData())
+    report_data.departure_time = message.text
+    report_data.time_spent = time_odds(
+        report_data.arrival_time,
+        report_data.departure_time
+    )
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent} \n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км."
+    )
+    await message.answer(report_text, reply_markup=main_kb)
+    await state.clear()
+
+
+class EditIntermediateOdometer(StatesGroup):
+    intermediate_odometer = State()
+
+
+@routers.message(F.text.lower() == "изменить значения промеж. одометра")
+async def start_edit_intermediate_odometer(message: Message, state: FSMContext):
+    await state.set_state(EditIntermediateOdometer.intermediate_odometer)
+    await message.answer("Введите новое значение промежуточного одометра")
+
+
+@routers.message(EditIntermediateOdometer.intermediate_odometer)
+async def finish_edit_intermediate_odometer(message: Message, state: FSMContext):
+    global user_report_data  # Указываем, что используем глобальную переменную
+    user_id = message.from_user.id
+    report_data = user_report_data.setdefault(user_id, ReportData())
+    report_data.intermediate_odometer = message.text  # Изменяем время выезда
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent} \n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км."
+    )
+    await message.answer(report_text, reply_markup=main_kb)
+    await state.clear()
+
+
+class EditPictureIntermediateOdometer(StatesGroup):
+    take_picture_intermediate_odometer = State()
+
+
+@routers.message(F.text.lower() == "изменить фото промеж. одометра")
+async def start_edit_picture_intermediate_odometer(message: Message, state: FSMContext):
+    await state.set_state(EditPictureIntermediateOdometer.take_picture_intermediate_odometer)
+    await message.answer("Отправьте новое фото с промежуточным одометром")
+
+
+@routers.message(EditPictureIntermediateOdometer.take_picture_intermediate_odometer, F.photo)
+async def finish_edit_picture_intermediate_odometer(message: Message, state: FSMContext):
+    global user_report_data  # Указываем, что используем глобальную переменную
+    user_id = message.from_user.id
+    report_data = user_report_data.setdefault(user_id, ReportData())
+    report_data.take_picture_intermediate_odometer = message.photo[-1].file_id
+    await message.answer("Фото изменено, результат будет в документе!", reply_markup=main_kb)
+    await state.clear()
+
+
+class EditFinalOdometer(StatesGroup):
+    final_odometer = State()
+
+
+@routers.message(F.text.lower() == "изменить конечное значение одометра")
+async def start_edit_final_odometer(message: Message, state: FSMContext):
+    await state.set_state(EditFinalOdometer.final_odometer)
+    await message.answer("Введите новое конечное значение одометра")
+
+
+@routers.message(EditFinalOdometer.final_odometer)
+async def finish_edit_final_odometer(message: Message, state: FSMContext):
+    global user_report_data  # Указываем, что используем глобальную переменную
+    user_id = message.from_user.id
+    report_data = user_report_data.setdefault(user_id, ReportData())
+    report_data.final_odometer = message.text  # Изменяем время выезда
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent} \n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км."
+    )
+    await message.answer(report_text, reply_markup=main_kb)
+    await state.clear()
+
+
+class EditPictureFinalOdometer(StatesGroup):
+    take_picture_final_odometer = State()
+
+
+@routers.message(F.text.lower() == "изменить фото конечного одометра")
+async def start_edit_picture_final_odometer(message: Message, state: FSMContext):
+    await state.set_state(EditPictureFinalOdometer.take_picture_final_odometer)
+    await message.answer("Отправьте новое фото с конечным одометром")
+
+
+@routers.message(EditPictureFinalOdometer.take_picture_final_odometer, F.photo)
+async def finish_edit_picture_intermediate_odometer(message: Message, state: FSMContext):
+    global user_report_data  # Указываем, что используем глобальную переменную
+    user_id = message.from_user.id
+    report_data = user_report_data.setdefault(user_id, ReportData())
+    report_data.take_picture_final_odometer = message.photo[-1].file_id
+    await message.answer("Фото изменено, результат будет в документе!", reply_markup=main_kb)
+    await state.clear()
+
