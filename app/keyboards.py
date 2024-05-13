@@ -7,6 +7,9 @@ from aiogram.types import (
 main_kb = ReplyKeyboardMarkup(
     keyboard=[
         [
+            KeyboardButton(text="Создать отчет", callback_data="create_report")
+        ],
+        [
             KeyboardButton(text="Изменить время выезда", callback_data="edit_time_departure")
         ],
         [

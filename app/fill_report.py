@@ -99,9 +99,12 @@ def time_odds(start_time, end_time):
         return None
 
 
-def create_report(report_data, report_date):
+def create_report(user_id):
     # Создание нового документа
+    report_date = datetime.datetime.now().strftime("%d %m %Y")
     document = Document()
+    global user_report_data
+    report_data = user_report_data.setdefault(user_id, ReportData())
 
     # Настройки документа
     document.styles['Normal'].font.name = 'Times New Roman'
@@ -127,76 +130,85 @@ def create_report(report_data, report_date):
     # Добавление данных из класса ReportData
     start_time = document.add_paragraph()
     start_time.add_run('Время выезда: ').bold = True
-    start_time.add_run(report_data.data.get('Время выезда', ''))
+    start_time.add_run(report_data.time_departure)
     start_time.paragraph_format.space_after = Pt(0)
 
     start_odometer = document.add_paragraph()
     start_odometer.add_run('Показания одометра: ').bold = True
-    start_odometer.add_run(report_data.data.get('Показания одометра', ''))
+    start_odometer.add_run(report_data.odometer_reading)
     start_odometer.paragraph_format.space_after = Pt(0)
+
+    #здесь нужна фотография с картинкой take_picture_new_odometer
 
     pribytie_text = document.add_paragraph()
     pribytie_text.add_run('Прибытие на заявку: ').bold = True
     pribytie_text.add_run(
-        f"{report_data.data.get('Прибытие на заявку', '')} комплекс {report_data.data.get('Комплекс', '')}")
+        f"{report_data.arrival_object} комплекс {report_data.arrival_complex}")
     pribytie_text.paragraph_format.space_after = Pt(0)
 
     object_time = document.add_paragraph()
     object_time.add_run('Время прибытия: ').bold = True
-    object_time.add_run(report_data.data.get('Время прибытия', ''))
+    object_time.add_run(report_data.arrival_time)
     object_time.paragraph_format.space_after = Pt(0)
 
     action = document.add_paragraph()
     action.add_run('Предпринятые действия: ').bold = True
-    action.add_run(', '.join(report_data.data.get('Предпринятые действия', '')))
+    action.add_run(report_data.actions_taken)
     action.paragraph_format.space_after = Pt(0)
 
     final_time = document.add_paragraph()
     final_time.add_run('Время убытия: ').bold = True
-    final_time.add_run(report_data.data.get('Время убытия', ''))
+    final_time.add_run(report_data.departure_time)
     final_time.paragraph_format.space_after = Pt(0)
 
     cost_time = document.add_paragraph()
     cost_time.add_run('Время пребывания на месте работы: ').bold = True
-    cost_time.add_run(f"{report_data.data.get('Время пребывания на месте работы', '')} часа")
+    cost_time.add_run(report_data.time_spent)
     cost_time.paragraph_format.space_after = Pt(0)
 
     inter_odometer = document.add_paragraph()
     inter_odometer.add_run('Промежуточные показания одометра: ').bold = True
-    inter_odometer.add_run(report_data.data.get('Промежуточные показания одометра', ''))
+    inter_odometer.add_run(report_data.intermediate_odometer)
     inter_odometer.paragraph_format.space_after = Pt(0)
 
+    # здесь нужна фотография с картинкой take_picture_intermediate_odometer
+
     final_odometer = document.add_paragraph()
-    final_odometer.add_run('Показания одометра: ').bold = True
-    final_odometer.add_run(report_data.data.get('Показания одометра', ''))
+    final_odometer.add_run('Конечные показания одометра: ').bold = True
+    final_odometer.add_run(report_data.final_odometer)
     final_odometer.paragraph_format.space_after = Pt(0)
+
+    # здесь нужна фотография с картинкой take_picture_final_odometer
 
     distance = document.add_paragraph()
     distance.add_run('Пройдено расстояния всего: ').bold = True
-    distance.add_run(f"{report_data.data.get('Пройдено расстояния всего', '')} км.")
+    distance.add_run(report_data.total_distance)
     distance.paragraph_format.space_after = Pt(0)
     # Сохранение документа
-    document.save(f'Отчет по АВР на {report_date}.docx')
+    document.save(f'./docs/Отчет по АВР на {report_date}.docx')
 
 
 # Обработчик текстового сообщения с данными для отчета
 @routers.message(Command("Text"))
 async def process_report_text(message: types.Message):
+    global user_report_data
+    user_id = message.from_user.id
+    report_data = user_report_data.setdefault(user_id, ReportData())
     text = message.text
-    report_data = ReportData(text)
-    report_date = datetime.datetime.now().strftime("%d %m %Y")
-    await message.reply(f"Отчет по АВР за {report_date}:\n"
-                        f"Время выезда: {report_data.data.get('Время выезда', '')}\n"
-                        f"Показания одометра: {report_data.data.get('Показания одометра', '')}\n"
-                        f"Прибытие на заявку: {report_data.data.get('Прибытие на заявку', '')} комплекс {report_data.data.get('Комплекс', '')}\n"
-                        f"Время прибытия: {report_data.data.get('Время прибытия', '')}\n"
-                        f"Предпринятые действия: {', '.join(report_data.data.get('Предпринятые действия', ''))}\n"
-                        f"Время убытия: {report_data.data.get('Время убытия', '')}\n"
-                        f"Время пребывания на месте работы: {report_data.data.get('Время пребывания на месте работы', '')} часа\n"
-                        f"Промежуточные показания одометра: {report_data.data.get('Промежуточные показания одометра', '')}\n"
-                        f"Показания одометра: {report_data.data.get('Показания одометра', '')}\n"
-                        f"Пройдено расстояния всего: {report_data.data.get('Пройдено расстояния всего', '')} км."
-                        )
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent}\n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км."
+    )
+    await message.answer(report_text, reply_markup=main_kb)
 
 
 class FillReport(StatesGroup):
@@ -323,7 +335,7 @@ async def process_picture_odometer3(message: Message, state: FSMContext):
 
     # Получаем или создаем объект ReportData для пользователя
     report_data = user_report_data.setdefault(user_id, ReportData())
-
+    await message.bot.download(file=message.photo[-1].file_id)
     # Обновляем объект ReportData полученными данными
     report_data.take_picture_final_odometer = message.photo[-1].file_id
     report_data.time_spent = time_odds(
