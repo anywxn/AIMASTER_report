@@ -1,6 +1,8 @@
 import re
+
+import docx
 from docx import Document
-from docx.shared import Pt
+from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import datetime
 import locale
@@ -99,6 +101,9 @@ def create_report(report_data, report_date):
     final_odometer.add_run('Показания одометра: ').bold = True
     final_odometer.add_run(report_data.data.get('Показания одометра', ''))
     final_odometer.paragraph_format.space_after = Pt(0)
+    img = "./picture/AgACAgIAAxkBAAIUxGZCa47vNJlMW9fXEQ9SYRPA3a-TAALO4DEbU14ZSouWlUbnnuO-AQADAgADeQADNQQ.png"
+    document = Document()
+    document.add_picture(img, width=Inches(1.25))
 
     distance = document.add_paragraph()
     distance.add_run('Пройдено расстояния всего: ').bold = True
@@ -106,7 +111,7 @@ def create_report(report_data, report_date):
     distance.paragraph_format.space_after = Pt(0)
 
     # Сохранение документа
-    document.save(f'Отчет по АВР на {report_date}.docx')
+    document.save(f'Отчет по АВРfdgfdgfd на {report_date}.docx')
 
 
 text = "время выезда 9 35 показания одометра 250465 прибытие на заявку 176085 комплекс LBS11400-LBL11401 время прибытия 11 30 предпринятые действия перезагрузка комплекса перенаведение комплекса время убытия 13 30 время пребывания на месте работы 2 часа промежуточные показания одометра 250556 прибытие на базу показания одометра 250647 пройдено расстояния всего 182 километра"

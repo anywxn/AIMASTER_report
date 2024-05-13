@@ -1,13 +1,11 @@
 import os
-import re
 from aiogram.filters.command import Command
-from aiogram import types, F, Router, Bot
-from aiogram.types import FSInputFile
+from aiogram import types, F, Router
 import librosa
 import soundfile as sf
 import speech_recognition as sr
-from docx import Document
-from datetime import datetime
+from app.fill_report import extract_data
+from app.keyboards import main_kb
 
 router = Router()
 
@@ -74,12 +72,8 @@ async def handle_voice(message: types.Message, bot=None):
     edited_message_text = '<b><i>Ваш запрос: </i></b>' + recognized_text
     await message.answer(edited_message_text, parse_mode="html")
 
-    # Получаем текущую дату
-    current_date = datetime.now().strftime("%Y-%m-%d")
-
-    # Отправляем файл в формате документа
-    document = FSInputFile(path=file_name_docx)
-    await message.answer_document(document=document)
+    user_id = message.from_user.id
+    await message.answer( await extract_data(user_id, recognized_text), reply_markup=main_kb)
 
     # Удаляем временные файлы
     os.remove(file_name_ogg)
