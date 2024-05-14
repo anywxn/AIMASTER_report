@@ -1,13 +1,16 @@
 import time
 import asyncio
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from config import TOKEN
 import logging
+import aiogram
 from aiogram import Bot, Dispatcher, types, F
 from app.handlers import handle_voice, router
 from app.fill_report import routers
 
 # Инициализация бота и диспетчера
-bot = Bot(token=TOKEN, parse_mode="HTML")
+bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 # Включаем логирование, чтобы не пропустить важные сообщения
 logging.basicConfig(level=logging.INFO)

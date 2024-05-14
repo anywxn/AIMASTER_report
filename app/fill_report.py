@@ -11,7 +11,6 @@ from app.keyboards import main_kb
 import re
 import datetime
 
-
 routers = Router()
 
 
@@ -36,6 +35,34 @@ class ReportData:
         self.take_picture_final_odometer = None
         self.total_distance = None
         self.time_spent = None
+
+    def count_filled_pictures(self):
+        """
+        Подсчитывает количество заполненных картинок.
+        """
+        filled = 0
+        if self.take_picture_new_odometer:
+            filled += 1
+        if self.take_picture_intermediate_odometer:
+            filled += 1
+        if self.take_picture_final_odometer:
+            filled += 1
+        return filled
+
+    def count_remaining_pictures(self):
+        """
+        Подсчитывает количество оставшихся картинок для заполнения.
+        Возвращает кортеж (количество оставшихся картинок, список имен картинок для заполнения).
+        """
+        remaining = 3 - self.count_filled_pictures()
+        remaining_pictures = []
+        if not self.take_picture_new_odometer:
+            remaining_pictures.append("Новый одометр")
+        if not self.take_picture_intermediate_odometer:
+            remaining_pictures.append("Промежуточный одометр")
+        if not self.take_picture_final_odometer:
+            remaining_pictures.append("Конечный одометр")
+        return remaining, remaining_pictures
 
     def fill_report(self, data):
         # Обновляем данные только если они присутствуют в переданном словаре
@@ -89,53 +116,54 @@ async def extract_data(user_id, text):
     report_data = user_report_data.setdefault(user_id, ReportData())
     data = {}
 
-    time_departure_match = re.findall(r'время выезда (.*?) ', text)
+    time_departure_match = re.findall(r'время выезда (.*?) показания одометра', text)
     if time_departure_match:
         normalized_time = normalize_time(time_departure_match[0])
         data['time_departure'] = normalized_time if normalized_time else None
     else:
         data['time_departure'] = None
 
-    odometer_reading_match = re.findall(r'показания одометра (.*?) ', text)
+    odometer_reading_match = re.findall(r'начальные показания одометра (.*?) прибытие на заявку', text)
     if odometer_reading_match:
         normalized_reading = normalize_odometer(odometer_reading_match[0])
         data['odometer_reading'] = normalized_reading if normalized_reading else None
     else:
         data['odometer_reading'] = None
 
-    arrival_object_match = re.findall(r'прибытие на заявку (.*?) ', text)
+    arrival_object_match = re.findall(r'прибытие на заявку (.*?) комплекс', text)
     if arrival_object_match:
         data['arrival_object'] = arrival_object_match[0].strip()
     else:
         data['arrival_object'] = None
 
-    arrival_complex_match = re.findall(r'комплекс (.*?) ', text)
+    arrival_complex_match = re.findall(r'комплекс (.*?) время прибытия на заявку', text)
     if arrival_complex_match:
         data['arrival_complex'] = arrival_complex_match[0].strip()
     else:
         data['arrival_complex'] = None
 
-    arrival_time_match = re.findall(r'время прибытия (.*?) п', text)
+    arrival_time_match = re.findall(r'время прибытия на заявку (.*?) предпринятые действия', text)
     if arrival_time_match:
         normalized_time = normalize_time(arrival_time_match[0])
         data['arrival_time'] = normalized_time if normalized_time else None
     else:
         data['arrival_time'] = None
 
-    actions_taken_match = re.findall(r'предпринятые действия (.*?) ', text, re.DOTALL)
+    actions_taken_match = re.findall(r'предпринятые действия (.*?) время убытия', text, re.DOTALL)
     if actions_taken_match:
         data['actions_taken'] = actions_taken_match[0].strip()
     else:
         data['actions_taken'] = None
 
-    departure_time_match = re.findall(r'время убытия (.*?) ', text)
+    departure_time_match = re.findall(r'время убытия (.*?) промежуточные показания одометра', text)
     if departure_time_match:
         normalized_time = normalize_time(departure_time_match[0])
         data['departure_time'] = normalized_time if normalized_time else None
     else:
         data['departure_time'] = None
 
-    intermediate_odometer_match = re.findall(r'промежуточные показания одометра (.*?) ',text)
+    intermediate_odometer_match = (re.findall
+                                   (r'промежуточные показания одометра (.*?) конечные показания одометра', text))
     if intermediate_odometer_match:
         normalized_reading = normalize_odometer(intermediate_odometer_match[0])
         data['intermediate_odometer'] = normalized_reading if normalized_reading else None
@@ -181,8 +209,13 @@ async def extract_data(user_id, text):
         f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
         f"Конечные показания одометра: {report_data.final_odometer}\n"
         f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
-        f"\n "
-        f"<b>Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!</b>"
+        f"\n"
+        f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+        f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+        f"\n"
+        f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+        f"\n"
+        f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
     )
 
     # Отправка сообщения с отчетом
@@ -215,6 +248,7 @@ def time_odds(start_time, end_time):
             return two
         else:
             return five
+
     try:
         # Приведение формата времени к общему виду (часы:минуты)
         start_time = re.sub(r'[^\d:]', '', start_time)
@@ -253,7 +287,14 @@ async def process_report_text(message: types.Message):
         f"Время пребывания на месте работы: {report_data.time_spent}\n"
         f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
         f"Конечные показания одометра: {report_data.final_odometer}\n"
-        f"Пройдено расстояния всего: {report_data.total_distance} км."
+        f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+        f"\n"
+        f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+        f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+        f"\n"
+        f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+        f"\n"
+        f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
     )
     await message.answer(report_text, reply_markup=main_kb)
 
@@ -279,23 +320,29 @@ class FillReport(StatesGroup):
 @routers.message(Command("fill_report"))
 async def fill_report_start(message: Message, state: FSMContext):
     await state.set_state(FillReport.time_departure)
-    await message.answer("Введите время выезда (например, '9 35').")
+    await message.answer("Введите время выезда (например, '9:35').")
 
 
 # Обработчики для заполнения данных отчета
 @routers.message(FillReport.time_departure)
 async def process_time_departure(message: Message, state: FSMContext):
-    await state.update_data(time_departure=message.text)
-    await state.set_state(FillReport.odometer_reading)
-    await message.answer("Отправьте показания одометра (например, '250465' обязательно 6 знаков).")
+    if re.match(r"\d{1,2}:\d{2}", message.text):
+        await state.update_data(time_departure=message.text)
+        await state.set_state(FillReport.odometer_reading)
+        await message.answer("Отправьте показания одометра (например, '250465' обязательно 6 знаков).")
+    else:
+        await message.answer("Введите корректное значение времени в формате 'чч:мм'.")
 
 
 @routers.message(FillReport.odometer_reading)
 async def process_odometer_reading(message: Message, state: FSMContext):
-    await state.update_data(odometer_reading=message.text)
-    await state.set_state(FillReport.take_picture_new_odometer)
-    await message.answer(
-        "Отправьте фотографию с начальным показанием одометра")
+    if message.text.isdigit() and len(message.text) == 6:
+        await state.update_data(odometer_reading=message.text)
+        await state.set_state(FillReport.take_picture_new_odometer)
+        await message.answer(
+            "Отправьте фотографию с начальным показанием одометра")
+    else:
+        await message.answer("Введите корректное значение одометра, состоящее из 6 цифр.")
 
 
 @routers.message(FillReport.take_picture_new_odometer, F.photo)
@@ -320,15 +367,18 @@ async def process_arrival_complex(message: Message, state: FSMContext):
     await state.update_data(arrival_complex=message.text)
     await state.set_state(FillReport.arrival_time)
     await message.answer(
-        "Отправьте время прибытия на объект (например, '10 15').")
+        "Отправьте время прибытия на объект (например, '10:15').")
 
 
 @routers.message(FillReport.arrival_time)
 async def process_arrival_time(message: Message, state: FSMContext):
-    await state.update_data(arrival_time=message.text)
-    await state.set_state(FillReport.actions_taken)
-    await message.answer(
-        "Отправьте предпринятые действия (например, 'перенастройка, перезапуск комплекса').")
+    if re.match(r"\d{1,2}:\d{2}", message.text):
+        await state.update_data(arrival_time=message.text)
+        await state.set_state(FillReport.actions_taken)
+        await message.answer(
+            "Отправьте предпринятые действия (например, 'перенастройка, перезапуск комплекса').")
+    else:
+        await message.answer("Введите корректное значение времени в формате 'чч:мм'.")
 
 
 @routers.message(FillReport.actions_taken)
@@ -336,23 +386,29 @@ async def process_actions_taken(message: Message, state: FSMContext):
     await state.update_data(actions_taken=message.text)
     await state.set_state(FillReport.departure_time)
     await message.answer(
-        "Отправьте время убытия (например, '12 30').")
+        "Отправьте время убытия (например, '12:30').")
 
 
 @routers.message(FillReport.departure_time)
 async def process_departure_time(message: Message, state: FSMContext):
-    await state.update_data(departure_time=message.text)
-    await state.set_state(FillReport.intermediate_odometer)
-    await message.answer(
-        "Отправьте промежуточные показания одометра (например, '250556' обязательно 6 знаков).")
+    if re.match(r"\d{1,2}:\d{2}", message.text):
+        await state.update_data(departure_time=message.text)
+        await state.set_state(FillReport.intermediate_odometer)
+        await message.answer(
+            "Отправьте промежуточные показания одометра (например, '250556' обязательно 6 знаков).")
+    else:
+        await message.answer("Введите корректное значение времени в формате 'чч:мм'.")
 
 
 @routers.message(FillReport.intermediate_odometer)
 async def process_intermediate_odometer(message: Message, state: FSMContext):
-    await state.update_data(intermediate_odometer=message.text)
-    await state.set_state(FillReport.take_picture_intermediate_odometer)
-    await message.answer(
-        "Отправьте фотографию с промежуточными показаниями одометра.")
+    if message.text.isdigit() and len(message.text) == 6:
+        await state.update_data(intermediate_odometer=message.text)
+        await state.set_state(FillReport.take_picture_intermediate_odometer)
+        await message.answer(
+            "Отправьте фотографию с промежуточными показаниями одометра.")
+    else:
+        await message.answer("Введите корректное значение одометра, состоящее из 6 цифр.")
 
 
 @routers.message(FillReport.take_picture_intermediate_odometer, F.photo)
@@ -365,10 +421,13 @@ async def process_picture_odometer2(message: Message, state: FSMContext):
 
 @routers.message(FillReport.final_odometer)
 async def process_final_odometer(message: Message, state: FSMContext):
-    await state.update_data(final_odometer=message.text)
-    await state.set_state(FillReport.take_picture_final_odometer)
-    await message.answer(
-        "Отправьте фотографию с конечными показаниями одометра.")
+    if message.text.isdigit() and len(message.text) == 6:
+        await state.update_data(final_odometer=message.text)
+        await state.set_state(FillReport.take_picture_final_odometer)
+        await message.answer(
+            "Отправьте фотографию с конечными показаниями одометра.")
+    else:
+        await message.answer("Введите корректное значение одометра, состоящее из 6 цифр.")
 
 
 @routers.message(FillReport.take_picture_final_odometer, F.photo)
@@ -405,7 +464,11 @@ async def process_picture_odometer3(message: Message, state: FSMContext):
         f"Время пребывания на месте работы: {report_data.time_spent}\n"
         f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
         f"Конечные показания одометра: {report_data.final_odometer}\n"
-        f"Пройдено расстояния всего: {report_data.total_distance} км."
+        f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+        f"\n"
+        f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+        f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+        f"\n"
     )
     await message.answer(report_text, reply_markup=main_kb)
     await state.clear()
@@ -420,120 +483,143 @@ async def create_report(message: Message):
     document = Document()
     global user_report_data
     report_data = user_report_data.setdefault(user_id, ReportData())
+    if report_data.count_filled_pictures() < 3:
+        await message.reply("Невозможно создать отчет. Необходимо заполнить три картинки.")
+        report_text = (
+            f"Отчет по АВР:\n"
+            f"Время выезда: {report_data.time_departure}\n"
+            f"Начальные показания одометра: {report_data.odometer_reading}\n"
+            f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+            f"Время прибытия: {report_data.arrival_time}\n"
+            f"Предпринятые действия: {report_data.actions_taken}\n"
+            f"Время убытия: {report_data.departure_time}\n"
+            f"Время пребывания на месте работы: {report_data.time_spent}\n"
+            f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+            f"Конечные показания одометра: {report_data.final_odometer}\n"
+            f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+            f"\n"
+            f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+            f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+            f"\n"
+            f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+            f"\n"
+            f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
+        )
+        await message.answer(report_text, reply_markup=main_kb)
+    else:
+        # Настройки документа
+        document.styles['Normal'].font.name = 'Times New Roman'
+        document.styles['Normal'].font.size = Pt(14)
 
-    # Настройки документа
-    document.styles['Normal'].font.name = 'Times New Roman'
-    document.styles['Normal'].font.size = Pt(14)
+        # Заголовок
+        title = document.add_paragraph()
+        title_run1 = title.add_run('Отчет по АВР')
+        title_run1.bold = True
+        title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title_run1.style.font.size = Pt(16)
+        title.paragraph_format.space_after = Pt(0)  # Установка интервала "После" в 0pt
 
-    # Заголовок
-    title = document.add_paragraph()
-    title_run1 = title.add_run('Отчет по АВР')
-    title_run1.bold = True
-    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title_run1.style.font.size = Pt(16)
-    title.paragraph_format.space_after = Pt(0)  # Установка интервала "После" в 0pt
+        title2 = document.add_paragraph()
+        title_run2 = title2.add_run(f'за {report_date}.')
+        title_run2.bold = True
+        title2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        title_run2.style.font.size = Pt(16)
+        # Добавление пустой строки
+        document.add_paragraph()
+        # Добавление данных из класса ReportData
+        start_time = document.add_paragraph()
+        start_time.add_run('Время выезда: ').bold = True
+        start_time.add_run(report_data.time_departure)
+        start_time.paragraph_format.space_after = Pt(0)
 
-    title2 = document.add_paragraph()
-    title_run2 = title2.add_run(f'за {report_date}.')
-    title_run2.bold = True
-    title2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    title_run2.style.font.size = Pt(16)
-    # Добавление пустой строки
-    document.add_paragraph()
-    # Добавление данных из класса ReportData
-    start_time = document.add_paragraph()
-    start_time.add_run('Время выезда: ').bold = True
-    start_time.add_run(report_data.time_departure)
-    start_time.paragraph_format.space_after = Pt(0)
+        start_odometer = document.add_paragraph()
+        start_odometer.add_run('Показания одометра: ').bold = True
+        start_odometer.add_run(report_data.odometer_reading)
+        start_odometer.paragraph_format.space_after = Pt(0)
+        # скачивание картинки с начальным одометром
+        file_pic_new_odometer_info = await bot.get_file(report_data.take_picture_new_odometer)
+        file_pic_new_odometer_download = await bot.download_file(file_pic_new_odometer_info.file_path)
+        temp_new_odometer = f"./picture/{report_data.take_picture_new_odometer}.png"
 
-    start_odometer = document.add_paragraph()
-    start_odometer.add_run('Показания одометра: ').bold = True
-    start_odometer.add_run(report_data.odometer_reading)
-    start_odometer.paragraph_format.space_after = Pt(0)
-    # скачивание картинки с начальным одометром
-    file_pic_new_odometer_info = await bot.get_file(report_data.take_picture_new_odometer)
-    file_pic_new_odometer_download = await bot.download_file(file_pic_new_odometer_info.file_path)
-    temp_new_odometer = f"./picture/{report_data.take_picture_new_odometer}.png"
+        with open(temp_new_odometer, 'wb') as f:
+            f.write(file_pic_new_odometer_download.read())
 
-    with open(temp_new_odometer, 'wb') as f:
-        f.write(file_pic_new_odometer_download.read())
+        picture_new_odometer = document.add_paragraph()
+        document.add_picture(temp_new_odometer, width=Inches(3))
+        picture_new_odometer.paragraph_format.space_after = Pt(0)
 
-    picture_new_odometer = document.add_paragraph()
-    document.add_picture(temp_new_odometer, width=Inches(3))
-    picture_new_odometer.paragraph_format.space_after = Pt(0)
+        pribytie_text = document.add_paragraph()
+        pribytie_text.add_run('Прибытие на заявку: ').bold = True
+        pribytie_text.add_run(
+            f"{report_data.arrival_object} комплекс {report_data.arrival_complex}")
+        pribytie_text.paragraph_format.space_after = Pt(0)
 
-    pribytie_text = document.add_paragraph()
-    pribytie_text.add_run('Прибытие на заявку: ').bold = True
-    pribytie_text.add_run(
-        f"{report_data.arrival_object} комплекс {report_data.arrival_complex}")
-    pribytie_text.paragraph_format.space_after = Pt(0)
+        object_time = document.add_paragraph()
+        object_time.add_run('Время прибытия: ').bold = True
+        object_time.add_run(report_data.arrival_time)
+        object_time.paragraph_format.space_after = Pt(0)
 
-    object_time = document.add_paragraph()
-    object_time.add_run('Время прибытия: ').bold = True
-    object_time.add_run(report_data.arrival_time)
-    object_time.paragraph_format.space_after = Pt(0)
+        action = document.add_paragraph()
+        action.add_run('Предпринятые действия: ').bold = True
+        action.add_run(report_data.actions_taken)
+        action.paragraph_format.space_after = Pt(0)
 
-    action = document.add_paragraph()
-    action.add_run('Предпринятые действия: ').bold = True
-    action.add_run(report_data.actions_taken)
-    action.paragraph_format.space_after = Pt(0)
+        final_time = document.add_paragraph()
+        final_time.add_run('Время убытия: ').bold = True
+        final_time.add_run(report_data.departure_time)
+        final_time.paragraph_format.space_after = Pt(0)
 
-    final_time = document.add_paragraph()
-    final_time.add_run('Время убытия: ').bold = True
-    final_time.add_run(report_data.departure_time)
-    final_time.paragraph_format.space_after = Pt(0)
+        cost_time = document.add_paragraph()
+        cost_time.add_run('Время пребывания на месте работы: ').bold = True
+        cost_time.add_run(report_data.time_spent)
+        cost_time.paragraph_format.space_after = Pt(0)
 
-    cost_time = document.add_paragraph()
-    cost_time.add_run('Время пребывания на месте работы: ').bold = True
-    cost_time.add_run(report_data.time_spent)
-    cost_time.paragraph_format.space_after = Pt(0)
+        inter_odometer = document.add_paragraph()
+        inter_odometer.add_run('Промежуточные показания одометра: ').bold = True
+        inter_odometer.add_run(report_data.intermediate_odometer)
+        inter_odometer.paragraph_format.space_after = Pt(0)
 
-    inter_odometer = document.add_paragraph()
-    inter_odometer.add_run('Промежуточные показания одометра: ').bold = True
-    inter_odometer.add_run(report_data.intermediate_odometer)
-    inter_odometer.paragraph_format.space_after = Pt(0)
+        # скачивание картинки с промежуточным одометром
+        file_pic_int_odometer_info = await bot.get_file(report_data.take_picture_intermediate_odometer)
+        file_pic_int_odometer_download = await bot.download_file(file_pic_int_odometer_info.file_path)
+        temp_int_odometer = f"./picture/{report_data.take_picture_intermediate_odometer}.png"
 
-    # скачивание картинки с промежуточным одометром
-    file_pic_int_odometer_info = await bot.get_file(report_data.take_picture_intermediate_odometer)
-    file_pic_int_odometer_download = await bot.download_file(file_pic_int_odometer_info.file_path)
-    temp_int_odometer = f"./picture/{report_data.take_picture_intermediate_odometer}.png"
+        with open(temp_int_odometer, 'wb') as f:
+            f.write(file_pic_int_odometer_download.read())
 
-    with open(temp_int_odometer, 'wb') as f:
-        f.write(file_pic_int_odometer_download.read())
+        picture_int_odometer = document.add_paragraph()
+        document.add_picture(temp_int_odometer, width=Inches(3))
+        picture_int_odometer.paragraph_format.space_after = Pt(0)
 
-    picture_int_odometer = document.add_paragraph()
-    document.add_picture(temp_int_odometer, width=Inches(3))
-    picture_int_odometer.paragraph_format.space_after = Pt(0)
+        final_odometer = document.add_paragraph()
+        final_odometer.add_run('Конечные показания одометра: ').bold = True
+        final_odometer.add_run(report_data.final_odometer)
+        final_odometer.paragraph_format.space_after = Pt(0)
 
-    final_odometer = document.add_paragraph()
-    final_odometer.add_run('Конечные показания одометра: ').bold = True
-    final_odometer.add_run(report_data.final_odometer)
-    final_odometer.paragraph_format.space_after = Pt(0)
+        # скачивание картинки с конечным одометром
+        file_pic_fin_odometer_info = await bot.get_file(report_data.take_picture_final_odometer)
+        file_pic_fin_odometer_download = await bot.download_file(file_pic_fin_odometer_info.file_path)
+        temp_fin_odometer = f"./picture/{report_data.take_picture_final_odometer}.png"
 
-    # скачивание картинки с конечным одометром
-    file_pic_fin_odometer_info = await bot.get_file(report_data.take_picture_final_odometer)
-    file_pic_fin_odometer_download = await bot.download_file(file_pic_fin_odometer_info.file_path)
-    temp_fin_odometer = f"./picture/{report_data.take_picture_final_odometer}.png"
+        with open(temp_fin_odometer, 'wb') as f:
+            f.write(file_pic_fin_odometer_download.read())
 
-    with open(temp_fin_odometer, 'wb') as f:
-        f.write(file_pic_fin_odometer_download.read())
+        picture_fin_odometer = document.add_paragraph()
+        document.add_picture(temp_fin_odometer, width=Inches(3))
+        picture_fin_odometer.paragraph_format.space_after = Pt(0)
 
-    picture_fin_odometer = document.add_paragraph()
-    document.add_picture(temp_fin_odometer, width=Inches(3))
-    picture_fin_odometer.paragraph_format.space_after = Pt(0)
-
-    distance = document.add_paragraph()
-    distance.add_run('Пройдено расстояния всего: ').bold = True
-    distance.add_run(str(report_data.total_distance))
-    distance.paragraph_format.space_after = Pt(0)
-    # Сохранение документа
-    document.save(f'./docs/Отчет по АВР на {report_date}.docx')
-    document = FSInputFile(path=f'./docs/Отчет по АВР на {report_date}.docx')
-    await message.answer_document(document=document)
-    os.remove(temp_new_odometer)
-    os.remove(temp_int_odometer)
-    os.remove(temp_fin_odometer)
-    os.remove(f'./docs/Отчет по АВР на {report_date}.docx')
+        distance = document.add_paragraph()
+        distance.add_run('Пройдено расстояния всего: ').bold = True
+        distance.add_run(str(report_data.total_distance))
+        distance.paragraph_format.space_after = Pt(0)
+        # Сохранение документа
+        document.save(f'./docs/Отчет по АВР на {report_date}.docx')
+        document = FSInputFile(path=f'./docs/Отчет по АВР на {report_date}.docx')
+        await message.answer_document(document=document)
+        os.remove(temp_new_odometer)
+        os.remove(temp_int_odometer)
+        os.remove(temp_fin_odometer)
+        os.remove(f'./docs/Отчет по АВР на {report_date}.docx')
 
 
 class EditTimeDeparture(StatesGroup):
@@ -562,10 +648,17 @@ async def finish_edit_time_departure(message: Message, state: FSMContext):
             f"Время прибытия: {report_data.arrival_time}\n"
             f"Предпринятые действия: {report_data.actions_taken}\n"
             f"Время убытия: {report_data.departure_time}\n"
-            f"Время пребывания на месте работы: {report_data.time_spent} \n"
+            f"Время пребывания на месте работы: {report_data.time_spent}\n"
             f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
             f"Конечные показания одометра: {report_data.final_odometer}\n"
-            f"Пройдено расстояния всего: {report_data.total_distance} км."
+            f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+            f"\n"
+            f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+            f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+            f"\n"
+            f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+            f"\n"
+            f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
         )
         # Отправляем обновленный отчет
         await message.answer(report_text, reply_markup=main_kb)
@@ -605,10 +698,17 @@ async def finish_edit_odometer_reading(message: Message, state: FSMContext):
             f"Время прибытия: {report_data.arrival_time}\n"
             f"Предпринятые действия: {report_data.actions_taken}\n"
             f"Время убытия: {report_data.departure_time}\n"
-            f"Время пребывания на месте работы: {report_data.time_spent} \n"
+            f"Время пребывания на месте работы: {report_data.time_spent}\n"
             f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
             f"Конечные показания одометра: {report_data.final_odometer}\n"
-            f"Пройдено расстояния всего: {report_data.total_distance} км."
+            f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+            f"\n"
+            f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+            f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+            f"\n"
+            f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+            f"\n"
+            f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
         )
         await message.answer(report_text, reply_markup=main_kb)
         await state.clear()
@@ -632,7 +732,27 @@ async def finish_edit_picture_odometer(message: Message, state: FSMContext):
     user_id = message.from_user.id
     report_data = user_report_data.setdefault(user_id, ReportData())
     report_data.take_picture_new_odometer = message.photo[-1].file_id
-    await message.answer("Фото изменено, результат будет в документе!", reply_markup=main_kb)
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Начальные показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent}\n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Конечные показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+        f"\n"
+        f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+        f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+        f"\n"
+        f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+        f"\n"
+        f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
+    )
+    await message.answer(report_text, reply_markup=main_kb)
     await state.clear()
 
 
@@ -660,10 +780,17 @@ async def finish_edit_arrival_object(message: Message, state: FSMContext):
         f"Время прибытия: {report_data.arrival_time}\n"
         f"Предпринятые действия: {report_data.actions_taken}\n"
         f"Время убытия: {report_data.departure_time}\n"
-        f"Время пребывания на месте работы: {report_data.time_spent} \n"
+        f"Время пребывания на месте работы: {report_data.time_spent}\n"
         f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
         f"Конечные показания одометра: {report_data.final_odometer}\n"
-        f"Пройдено расстояния всего: {report_data.total_distance} км."
+        f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+        f"\n"
+        f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+        f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+        f"\n"
+        f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+        f"\n"
+        f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
     )
     await message.answer(report_text, reply_markup=main_kb)
     await state.clear()
@@ -693,10 +820,17 @@ async def finish_edit_arrival_complex(message: Message, state: FSMContext):
         f"Время прибытия: {report_data.arrival_time}\n"
         f"Предпринятые действия: {report_data.actions_taken}\n"
         f"Время убытия: {report_data.departure_time}\n"
-        f"Время пребывания на месте работы: {report_data.time_spent} \n"
+        f"Время пребывания на месте работы: {report_data.time_spent}\n"
         f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
         f"Конечные показания одометра: {report_data.final_odometer}\n"
-        f"Пройдено расстояния всего: {report_data.total_distance} км."
+        f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+        f"\n"
+        f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+        f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+        f"\n"
+        f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+        f"\n"
+        f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
     )
     await message.answer(report_text, reply_markup=main_kb)
     await state.clear()
@@ -731,10 +865,17 @@ async def finish_edit_arrival_time(message: Message, state: FSMContext):
             f"Время прибытия: {report_data.arrival_time}\n"
             f"Предпринятые действия: {report_data.actions_taken}\n"
             f"Время убытия: {report_data.departure_time}\n"
-            f"Время пребывания на месте работы: {report_data.time_spent} \n"
+            f"Время пребывания на месте работы: {report_data.time_spent}\n"
             f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
             f"Конечные показания одометра: {report_data.final_odometer}\n"
-            f"Пройдено расстояния всего: {report_data.total_distance} км."
+            f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+            f"\n"
+            f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+            f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+            f"\n"
+            f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+            f"\n"
+            f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
         )
         await message.answer(report_text, reply_markup=main_kb)
         await state.clear()
@@ -766,10 +907,17 @@ async def finish_edit_actions_taken(message: Message, state: FSMContext):
         f"Время прибытия: {report_data.arrival_time}\n"
         f"Предпринятые действия: {report_data.actions_taken}\n"
         f"Время убытия: {report_data.departure_time}\n"
-        f"Время пребывания на месте работы: {report_data.time_spent} \n"
+        f"Время пребывания на месте работы: {report_data.time_spent}\n"
         f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
         f"Конечные показания одометра: {report_data.final_odometer}\n"
-        f"Пройдено расстояния всего: {report_data.total_distance} км."
+        f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+        f"\n"
+        f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+        f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+        f"\n"
+        f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+        f"\n"
+        f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
     )
     await message.answer(report_text, reply_markup=main_kb)
     await state.clear()
@@ -804,10 +952,17 @@ async def finish_edit_departure_time(message: Message, state: FSMContext):
             f"Время прибытия: {report_data.arrival_time}\n"
             f"Предпринятые действия: {report_data.actions_taken}\n"
             f"Время убытия: {report_data.departure_time}\n"
-            f"Время пребывания на месте работы: {report_data.time_spent} \n"
+            f"Время пребывания на месте работы: {report_data.time_spent}\n"
             f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
             f"Конечные показания одометра: {report_data.final_odometer}\n"
-            f"Пройдено расстояния всего: {report_data.total_distance} км."
+            f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+            f"\n"
+            f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+            f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+            f"\n"
+            f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+            f"\n"
+            f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
         )
         await message.answer(report_text, reply_markup=main_kb)
         await state.clear()
@@ -840,10 +995,17 @@ async def finish_edit_intermediate_odometer(message: Message, state: FSMContext)
             f"Время прибытия: {report_data.arrival_time}\n"
             f"Предпринятые действия: {report_data.actions_taken}\n"
             f"Время убытия: {report_data.departure_time}\n"
-            f"Время пребывания на месте работы: {report_data.time_spent} \n"
+            f"Время пребывания на месте работы: {report_data.time_spent}\n"
             f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
             f"Конечные показания одометра: {report_data.final_odometer}\n"
-            f"Пройдено расстояния всего: {report_data.total_distance} км."
+            f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+            f"\n"
+            f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+            f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+            f"\n"
+            f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+            f"\n"
+            f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
         )
         await message.answer(report_text, reply_markup=main_kb)
         await state.clear()
@@ -867,7 +1029,25 @@ async def finish_edit_picture_intermediate_odometer(message: Message, state: FSM
     user_id = message.from_user.id
     report_data = user_report_data.setdefault(user_id, ReportData())
     report_data.take_picture_intermediate_odometer = message.photo[-1].file_id
-    await message.answer("Фото изменено, результат будет в документе!", reply_markup=main_kb)
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Начальные показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent}\n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Конечные показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+        f"\n"
+        f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+        f"Осталось заполнить картинок: {report_data.count_remaining_pictures()}\n"
+        f"\n"
+        f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
+    )
+    await message.answer(report_text, reply_markup=main_kb)
     await state.clear()
 
 
@@ -900,10 +1080,17 @@ async def finish_edit_final_odometer(message: Message, state: FSMContext):
             f"Время прибытия: {report_data.arrival_time}\n"
             f"Предпринятые действия: {report_data.actions_taken}\n"
             f"Время убытия: {report_data.departure_time}\n"
-            f"Время пребывания на месте работы: {report_data.time_spent} \n"
+            f"Время пребывания на месте работы: {report_data.time_spent}\n"
             f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
-            f"ПКонечные показания одометра: {report_data.final_odometer}\n"
-            f"Пройдено расстояния всего: {report_data.total_distance} км."
+            f"Конечные показания одометра: {report_data.final_odometer}\n"
+            f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+            f"\n"
+            f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+            f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+            f"\n"
+            f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+            f"\n"
+            f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
         )
         await message.answer(report_text, reply_markup=main_kb)
         await state.clear()
@@ -927,5 +1114,25 @@ async def finish_edit_picture_intermediate_odometer(message: Message, state: FSM
     user_id = message.from_user.id
     report_data = user_report_data.setdefault(user_id, ReportData())
     report_data.take_picture_final_odometer = message.photo[-1].file_id
-    await message.answer("Фото изменено, результат будет в документе!", reply_markup=main_kb)
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Начальные показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent}\n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Конечные показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+        f"\n"
+        f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+        f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+        f"\n"
+        f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+        f"\n"
+        f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
+    )
+    await message.answer(report_text, reply_markup=main_kb)
     await state.clear()
