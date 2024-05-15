@@ -4,7 +4,6 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from config import TOKEN
 import logging
-import aiogram
 from aiogram import Bot, Dispatcher, types, F
 from app.handlers import handle_voice, router
 from app.fill_report import routers
@@ -30,13 +29,5 @@ async def handle_voice_wrapper(message: types.Message):
 
 # Запуск бота
 if __name__ == '__main__':
-    while True:
-        try:
-            try:
-                asyncio.run(main())
-                time.sleep(5)
-            except Exception as e:
-                print(f"Произошла ошибка: {e}")
-                time.sleep(5)
-        except KeyboardInterrupt:
-            print("Завершение выполнения")
+    asyncio.run(main())
+
