@@ -271,7 +271,7 @@ def time_odds(start_time, end_time):
 
 
 # Обработчик текстового сообщения с данными для отчета
-@routers.message(Command("Text"))
+@routers.message(Command("view_report"))
 async def process_report_text(message: types.Message):
     global user_report_data
     user_id = message.from_user.id
@@ -299,13 +299,14 @@ async def process_report_text(message: types.Message):
     await message.answer(report_text, reply_markup=main_kb)
 
 
+# Объявление состояний
 class FillReport(StatesGroup):
     time_departure = State()  # Время выезда
     odometer_reading = State()  # Показания одометра
     take_picture_new_odometer = State()  # Фотография начального показателя одометра
     arrival_object = State()  # Номер заявки
-    arrival_complex = State()  # Номер или навание обьекта
-    arrival_time = State()  # Время прибытие на заявку
+    arrival_complex = State()  # Номер или название объекта
+    arrival_time = State()  # Время прибытия на заявку
     actions_taken = State()  # Предпринятые действия
     departure_time = State()  # Время убытия
     intermediate_odometer = State()  # Промежуточные показания одометра
@@ -320,13 +321,19 @@ class FillReport(StatesGroup):
 @routers.message(Command("fill_report"))
 async def fill_report_start(message: Message, state: FSMContext):
     await state.set_state(FillReport.time_departure)
-    await message.answer("Введите время выезда (например, '9:35').")
+    await message.answer("Введите время выезда (например, '9:35').\nИли напишите /skip для пропуска шага, /cancel для отмены.")
 
 
 # Обработчики для заполнения данных отчета
 @routers.message(FillReport.time_departure)
 async def process_time_departure(message: Message, state: FSMContext):
-    if re.match(r"\d{1,2}:\d{2}", message.text):
+    if message.text == "/skip":
+        await state.set_state(FillReport.odometer_reading)
+        await message.answer("Этап пропущен. Отправьте показания одометра (например, '250465' обязательно 6 знаков).")
+    elif message.text == "/cancel":
+        await state.clear()
+        await message.answer("Процесс заполнения отчета отменен.")
+    elif re.match(r"\d{1,2}:\d{2}", message.text):
         await state.update_data(time_departure=message.text)
         await state.set_state(FillReport.odometer_reading)
         await message.answer("Отправьте показания одометра (например, '250465' обязательно 6 знаков).")
@@ -336,98 +343,223 @@ async def process_time_departure(message: Message, state: FSMContext):
 
 @routers.message(FillReport.odometer_reading)
 async def process_odometer_reading(message: Message, state: FSMContext):
-    if message.text.isdigit() and len(message.text) == 6:
+    if message.text == "/skip":
+        await state.set_state(FillReport.take_picture_new_odometer)
+        await message.answer("Этап пропущен. Отправьте фотографию с начальным показанием одометра.")
+    elif message.text == "/cancel":
+        await state.clear()
+        await message.answer("Процесс заполнения отчета отменен.")
+    elif message.text.isdigit() and len(message.text) == 6:
         await state.update_data(odometer_reading=message.text)
         await state.set_state(FillReport.take_picture_new_odometer)
-        await message.answer(
-            "Отправьте фотографию с начальным показанием одометра")
+        await message.answer("Отправьте фотографию с начальным показанием одометра.")
     else:
         await message.answer("Введите корректное значение одометра, состоящее из 6 цифр.")
 
 
 @routers.message(FillReport.take_picture_new_odometer, F.photo)
 async def process_picture_odometer1(message: Message, state: FSMContext):
-    await state.update_data(take_picture_new_odometer=message.photo[-1].file_id)
-    await state.set_state(FillReport.arrival_object)
-    await message.answer(
-        "Отправьте номер заявки (например, '176085').")
+    if message.text == "/skip":
+        await state.set_state(FillReport.arrival_object)
+        await message.answer("Этап пропущен. Отправьте номер заявки (например, '176085').")
+    elif message.text == "/cancel":
+        await state.clear()
+        await message.answer("Процесс заполнения отчета отменен.")
+    else:
+        await state.update_data(take_picture_new_odometer=message.photo[-1].file_id)
+        await state.set_state(FillReport.arrival_object)
+        await message.answer("Отправьте номер заявки (например, '176085').")
 
 
 @routers.message(FillReport.arrival_object)
 async def process_arrival_object(message: Message, state: FSMContext):
-    await state.update_data(arrival_object=message.text)
-    await state.set_state(FillReport.arrival_complex)
-    await message.answer(
-        "Отправьте название объекта или "
-        "комплекса (например,'LBS11400-LBL11401').")
+    if message.text == "/skip":
+        await state.set_state(FillReport.arrival_complex)
+        await message.answer("Этап пропущен. Отправьте название объекта или комплекса (например, 'LBS11400-LBL11401').")
+    elif message.text == "/cancel":
+        await state.clear()
+        await message.answer("Процесс заполнения отчета отменен.")
+    else:
+        await state.update_data(arrival_object=message.text)
+        await state.set_state(FillReport.arrival_complex)
+        await message.answer("Отправьте название объекта или комплекса (например, 'LBS11400-LBL11401').")
 
 
 @routers.message(FillReport.arrival_complex)
 async def process_arrival_complex(message: Message, state: FSMContext):
-    await state.update_data(arrival_complex=message.text)
-    await state.set_state(FillReport.arrival_time)
-    await message.answer(
-        "Отправьте время прибытия на объект (например, '10:15').")
+    if message.text == "/skip":
+        await state.set_state(FillReport.arrival_time)
+        await message.answer("Этап пропущен. Отправьте время прибытия на объект (например, '10:15').")
+    elif message.text == "/cancel":
+        await state.clear()
+        await message.answer("Процесс заполнения отчета отменен.")
+    else:
+        await state.update_data(arrival_complex=message.text)
+        await state.set_state(FillReport.arrival_time)
+        await message.answer("Отправьте время прибытия на объект (например, '10:15').")
 
 
 @routers.message(FillReport.arrival_time)
 async def process_arrival_time(message: Message, state: FSMContext):
-    if re.match(r"\d{1,2}:\d{2}", message.text):
+    if message.text == "/skip":
+        await state.set_state(FillReport.actions_taken)
+        await message.answer("Этап пропущен. Отправьте предпринятые действия (например, 'перенастройка, перезапуск комплекса').")
+    elif message.text == "/cancel":
+        await state.clear()
+        await message.answer("Процесс заполнения отчета отменен.")
+    elif re.match(r"\d{1,2}:\d{2}", message.text):
         await state.update_data(arrival_time=message.text)
         await state.set_state(FillReport.actions_taken)
-        await message.answer(
-            "Отправьте предпринятые действия (например, 'перенастройка, перезапуск комплекса').")
+        await message.answer("Отправьте предпринятые действия (например, 'перенастройка, перезапуск комплекса').")
     else:
         await message.answer("Введите корректное значение времени в формате 'чч:мм'.")
 
 
 @routers.message(FillReport.actions_taken)
 async def process_actions_taken(message: Message, state: FSMContext):
-    await state.update_data(actions_taken=message.text)
-    await state.set_state(FillReport.departure_time)
-    await message.answer(
-        "Отправьте время убытия (например, '12:30').")
+    if message.text == "/skip":
+        await state.set_state(FillReport.departure_time)
+        await message.answer("Этап пропущен. Отправьте время убытия (например, '12:30').")
+    elif message.text == "/cancel":
+        await state.clear()
+        await message.answer("Процесс заполнения отчета отменен.")
+    else:
+        await state.update_data(actions_taken=message.text)
+        await state.set_state(FillReport.departure_time)
+        await message.answer("Отправьте время убытия (например, '12:30').")
 
 
 @routers.message(FillReport.departure_time)
 async def process_departure_time(message: Message, state: FSMContext):
-    if re.match(r"\d{1,2}:\d{2}", message.text):
+    if message.text == "/skip":
+        await state.set_state(FillReport.intermediate_odometer)
+        await message.answer("Этап пропущен. Отправьте промежуточные показания одометра (например, '250556' обязательно 6 знаков).")
+    elif message.text == "/cancel":
+        await state.clear()
+        await message.answer("Процесс заполнения отчета отменен.")
+    elif re.match(r"\d{1,2}:\d{2}", message.text):
         await state.update_data(departure_time=message.text)
         await state.set_state(FillReport.intermediate_odometer)
-        await message.answer(
-            "Отправьте промежуточные показания одометра (например, '250556' обязательно 6 знаков).")
+        await message.answer("Отправьте промежуточные показания одометра (например, '250556' обязательно 6 знаков).")
     else:
         await message.answer("Введите корректное значение времени в формате 'чч:мм'.")
 
 
 @routers.message(FillReport.intermediate_odometer)
 async def process_intermediate_odometer(message: Message, state: FSMContext):
-    if message.text.isdigit() and len(message.text) == 6:
+    if message.text == "/skip":
+        await state.set_state(FillReport.take_picture_intermediate_odometer)
+        await message.answer("Этап пропущен. Отправьте фотографию с промежуточными показаниями одометра.")
+    elif message.text == "/cancel":
+        await state.clear()
+        await message.answer("Процесс заполнения отчета отменен.")
+    elif message.text.isdigit() and len(message.text) == 6:
         await state.update_data(intermediate_odometer=message.text)
         await state.set_state(FillReport.take_picture_intermediate_odometer)
-        await message.answer(
-            "Отправьте фотографию с промежуточными показаниями одометра.")
+        await message.answer("Отправьте фотографию с промежуточными показаниями одометра.")
     else:
         await message.answer("Введите корректное значение одометра, состоящее из 6 цифр.")
 
 
 @routers.message(FillReport.take_picture_intermediate_odometer, F.photo)
 async def process_picture_odometer2(message: Message, state: FSMContext):
-    await state.update_data(take_picture_intermediate_odometer=message.photo[-1].file_id)
-    await state.set_state(FillReport.final_odometer)
-    await message.answer(
-        "Отправьте конечные показания одометра (например, '250556' обязательно 6 знаков).")
+    if message.text == "/skip":
+        await state.set_state(FillReport.final_odometer)
+        await message.answer("Этап пропущен. Отправьте конечные показания одометра (например, '250556' обязательно 6 знаков).")
+    elif message.text == "/cancel":
+        await state.clear()
+        await message.answer("Процесс заполнения отчета отменен.")
+    else:
+        await state.update_data(take_picture_intermediate_odometer=message.photo[-1].file_id)
+        await state.set_state(FillReport.final_odometer)
+        await message.answer("Отправьте конечные показания одометра (например, '250556' обязательно 6 знаков).")
 
 
 @routers.message(FillReport.final_odometer)
 async def process_final_odometer(message: Message, state: FSMContext):
-    if message.text.isdigit() and len(message.text) == 6:
+    if message.text == "/skip":
+        await state.set_state(FillReport.take_picture_final_odometer)
+        await message.answer("Этап пропущен. Отправьте фотографию с конечными показаниями одометра.")
+    elif message.text == "/cancel":
+        await state.clear()
+        await message.answer("Процесс заполнения отчета отменен.")
+    elif message.text.isdigit() and len(message.text) == 6:
         await state.update_data(final_odometer=message.text)
         await state.set_state(FillReport.take_picture_final_odometer)
-        await message.answer(
-            "Отправьте фотографию с конечными показаниями одометра.")
+        await message.answer("Отправьте фотографию с конечными показаниями одометра.")
     else:
         await message.answer("Введите корректное значение одометра, состоящее из 6 цифр.")
+
+
+@routers.message(FillReport.take_picture_final_odometer, F.photo)
+async def process_picture_odometer3(message: Message, state: FSMContext):
+    if message.text == "/skip":
+        await finalize_report(message, state)
+    elif message.text == "/cancel":
+        await state.clear()
+        await message.answer("Процесс заполнения отчета отменен.")
+    else:
+        global user_report_data  # Объявляем глобальную переменную
+        user_id = message.from_user.id  # Получаем ID пользователя
+        state_data = await state.get_data()  # Получаем данные из состояния FSM
+
+        # Обновляем состояние FSM с идентификатором файла фотографии
+        await state.update_data(take_picture_final_odometer=message.photo[-1].file_id)
+
+        # Получаем или создаем объект ReportData для пользователя
+        report_data = user_report_data.setdefault(user_id, ReportData())
+        await message.bot.download(file=message.photo[-1].file_id)
+        # Обновляем объект ReportData полученными данными
+        report_data.take_picture_final_odometer = message.photo[-1].file_id
+        report_data.time_spent = time_odds(
+            state_data.get('arrival_time'),
+            state_data.get('departure_time')
+        )
+        report_data.total_distance = total_distance(
+            state_data.get('odometer_reading'),
+            state_data.get('final_odometer')
+        )
+        report_data.fill_report(state_data)
+        report_text = (
+            f"Отчет по АВР:\n"
+            f"Время выезда: {report_data.time_departure}\n"
+            f"Начальные показания одометра: {report_data.odometer_reading}\n"
+            f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+            f"Время прибытия: {report_data.arrival_time}\n"
+            f"Предпринятые действия: {report_data.actions_taken}\n"
+            f"Время убытия: {report_data.departure_time}\n"
+            f"Время пребывания на месте работы: {report_data.time_spent}\n"
+            f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+            f"Конечные показания одометра: {report_data.final_odometer}\n"
+            f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+            f"\n"
+            f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+            f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+            f"\n"
+        )
+        await message.answer(report_text, reply_markup=main_kb)
+        await state.clear()
+
+
+async def finalize_report(message: Message, state: FSMContext, user_id):
+    state_data = await state.get_data()
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {state_data.get('time_departure', 'не указано')}\n"
+        f"Начальные показания одометра: {state_data.get('odometer_reading', 'не указано')}\n"
+        f"Прибытие на заявку: {state_data.get('arrival_object', 'не указано')} комплекс {state_data.get('arrival_complex', 'не указано')}\n"
+        f"Время прибытия: {state_data.get('arrival_time', 'не указано')}\n"
+        f"Предпринятые действия: {state_data.get('actions_taken', 'не указано')}\n"
+        f"Время убытия: {state_data.get('departure_time', 'не указано')}\n"
+        f"Промежуточные показания одометра: {state_data.get('intermediate_odometer', 'не указано')}\n"
+        f"Конечные показания одометра: {state_data.get('final_odometer', 'не указано')}\n"
+        f"Фотографии:\n"
+        f"Начальные показания: {state_data.get('take_picture_new_odometer', 'не указано')}\n"
+        f"Промежуточные показания: {state_data.get('take_picture_intermediate_odometer', 'не указано')}\n"
+        f"Конечные показания: {state_data.get('take_picture_final_odometer', 'не указано')}\n"
+    )
+    await message.answer(report_text)
+    await state.clear()
 
 
 @routers.message(FillReport.take_picture_final_odometer, F.photo)
