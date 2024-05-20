@@ -7,6 +7,7 @@ import logging
 from aiogram import Bot, Dispatcher, types, F
 from app.handlers import handle_voice, router
 from app.fill_report import routers
+from app.generate import genetare_router
 
 # Инициализация бота и диспетчера
 bot = Bot(token=TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -18,6 +19,7 @@ logging.basicConfig(level=logging.INFO)
 async def main():
     dp.include_router(router)
     dp.include_router(routers)
+    dp.include_router(genetare_router)
     await bot.delete_webhook(drop_pending_updates=True)
     await dp.start_polling(bot)
 

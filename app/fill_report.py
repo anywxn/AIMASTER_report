@@ -1,5 +1,5 @@
 import os
-from aiogram import types, F, Router
+from aiogram import F, Router
 from aiogram.types import Message, FSInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -270,9 +270,32 @@ def time_odds(start_time, end_time):
         return None
 
 
+# Обработчик для команды /reset_report, сбрасывающей данные отчета
+@routers.message(Command("reset_report"))
+async def reset_report(message: Message):
+    global user_report_data
+    user_id = message.from_user.id  # Получаем ID пользователя
+    if user_id in user_report_data:
+        del user_report_data[user_id]  # Удаляем данные отчета для пользователя
+        await message.answer("Данные вашего отчета были сброшены.", reply_markup=main_kb)
+    else:
+        await message.answer("У вас нет активного отчета для сброса.", reply_markup=main_kb)
+
+
+@routers.message(F.text.lower() == "очистить отчет")
+async def reset_report(message: Message):
+    global user_report_data
+    user_id = message.from_user.id  # Получаем ID пользователя
+    if user_id in user_report_data:
+        del user_report_data[user_id]  # Удаляем данные отчета для пользователя
+        await message.answer("Данные вашего отчета были сброшены.", reply_markup=main_kb)
+    else:
+        await message.answer("У вас нет активного отчета для сброса.", reply_markup=main_kb)
+
+
 # Обработчик текстового сообщения с данными для отчета
 @routers.message(Command("view_report"))
-async def process_report_text(message: types.Message):
+async def process_report_text(message: Message):
     global user_report_data
     user_id = message.from_user.id
     report_data = user_report_data.setdefault(user_id, ReportData())
@@ -296,7 +319,41 @@ async def process_report_text(message: types.Message):
         f"\n"
         f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
     )
-    await message.answer(report_text, reply_markup=main_kb)
+    if user_id in user_report_data:
+        await message.answer(report_text, reply_markup=main_kb)
+    else:
+        await message.answer("У вас нет активного отчета.", reply_markup=main_kb)
+
+
+@routers.message(F.text.lower() == "посмотреть отчет")
+async def process_report_text(message: Message):
+    global user_report_data
+    user_id = message.from_user.id
+    report_data = user_report_data.setdefault(user_id, ReportData())
+    report_text = (
+        f"Отчет по АВР:\n"
+        f"Время выезда: {report_data.time_departure}\n"
+        f"Начальные показания одометра: {report_data.odometer_reading}\n"
+        f"Прибытие на заявку: {report_data.arrival_object} комплекс {report_data.arrival_complex}\n"
+        f"Время прибытия: {report_data.arrival_time}\n"
+        f"Предпринятые действия: {report_data.actions_taken}\n"
+        f"Время убытия: {report_data.departure_time}\n"
+        f"Время пребывания на месте работы: {report_data.time_spent}\n"
+        f"Промежуточные показания одометра: {report_data.intermediate_odometer}\n"
+        f"Конечные показания одометра: {report_data.final_odometer}\n"
+        f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
+        f"\n"
+        f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
+        f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+        f"\n"
+        f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
+        f"\n"
+        f"sНе забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
+    )
+    if user_id in user_report_data:
+        await message.answer(report_text, reply_markup=main_kb)
+    else:
+        await message.answer("У вас нет активного отчета.", reply_markup=main_kb)
 
 
 # Объявление состояний
@@ -357,7 +414,7 @@ async def process_odometer_reading(message: Message, state: FSMContext):
         await message.answer("Введите корректное значение одометра, состоящее из 6 цифр.")
 
 
-@routers.message(FillReport.take_picture_new_odometer, F.photo)
+@routers.message(FillReport.take_picture_new_odometer)
 async def process_picture_odometer1(message: Message, state: FSMContext):
     if message.text == "/skip":
         await state.set_state(FillReport.arrival_object)
@@ -461,7 +518,7 @@ async def process_intermediate_odometer(message: Message, state: FSMContext):
         await message.answer("Введите корректное значение одометра, состоящее из 6 цифр.")
 
 
-@routers.message(FillReport.take_picture_intermediate_odometer, F.photo)
+@routers.message(FillReport.take_picture_intermediate_odometer)
 async def process_picture_odometer2(message: Message, state: FSMContext):
     if message.text == "/skip":
         await state.set_state(FillReport.final_odometer)
@@ -491,15 +548,27 @@ async def process_final_odometer(message: Message, state: FSMContext):
         await message.answer("Введите корректное значение одометра, состоящее из 6 цифр.")
 
 
-@routers.message(FillReport.take_picture_final_odometer, F.photo)
+@routers.message(FillReport.take_picture_final_odometer)
 async def process_picture_odometer3(message: Message, state: FSMContext):
     if message.text == "/skip":
-        await finalize_report(message, state)
+        state_data = await state.get_data()
+        user_id = message.from_user.id  # Получаем ID пользователя
+        global user_report_data
+        report_data = user_report_data.setdefault(user_id, ReportData())
+        report_data.time_spent = time_odds(
+            state_data.get('arrival_time'),
+            state_data.get('departure_time')
+        )
+        report_data.total_distance = total_distance(
+            state_data.get('odometer_reading'),
+            state_data.get('final_odometer')
+        )
+        report_data.fill_report(state_data)
+        await finalize_report(message, state, user_id)
     elif message.text == "/cancel":
         await state.clear()
         await message.answer("Процесс заполнения отчета отменен.")
     else:
-        global user_report_data  # Объявляем глобальную переменную
         user_id = message.from_user.id  # Получаем ID пользователя
         state_data = await state.get_data()  # Получаем данные из состояния FSM
 
@@ -542,49 +611,8 @@ async def process_picture_odometer3(message: Message, state: FSMContext):
 
 
 async def finalize_report(message: Message, state: FSMContext, user_id):
-    state_data = await state.get_data()
-    report_text = (
-        f"Отчет по АВР:\n"
-        f"Время выезда: {state_data.get('time_departure', 'не указано')}\n"
-        f"Начальные показания одометра: {state_data.get('odometer_reading', 'не указано')}\n"
-        f"Прибытие на заявку: {state_data.get('arrival_object', 'не указано')} комплекс {state_data.get('arrival_complex', 'не указано')}\n"
-        f"Время прибытия: {state_data.get('arrival_time', 'не указано')}\n"
-        f"Предпринятые действия: {state_data.get('actions_taken', 'не указано')}\n"
-        f"Время убытия: {state_data.get('departure_time', 'не указано')}\n"
-        f"Промежуточные показания одометра: {state_data.get('intermediate_odometer', 'не указано')}\n"
-        f"Конечные показания одометра: {state_data.get('final_odometer', 'не указано')}\n"
-        f"Фотографии:\n"
-        f"Начальные показания: {state_data.get('take_picture_new_odometer', 'не указано')}\n"
-        f"Промежуточные показания: {state_data.get('take_picture_intermediate_odometer', 'не указано')}\n"
-        f"Конечные показания: {state_data.get('take_picture_final_odometer', 'не указано')}\n"
-    )
-    await message.answer(report_text)
-    await state.clear()
-
-
-@routers.message(FillReport.take_picture_final_odometer, F.photo)
-async def process_picture_odometer3(message: Message, state: FSMContext):
     global user_report_data  # Объявляем глобальную переменную
-    user_id = message.from_user.id  # Получаем ID пользователя
-    state_data = await state.get_data()  # Получаем данные из состояния FSM
-
-    # Обновляем состояние FSM с идентификатором файла фотографии
-    await state.update_data(take_picture_final_odometer=message.photo[-1].file_id)
-
-    # Получаем или создаем объект ReportData для пользователя
     report_data = user_report_data.setdefault(user_id, ReportData())
-    await message.bot.download(file=message.photo[-1].file_id)
-    # Обновляем объект ReportData полученными данными
-    report_data.take_picture_final_odometer = message.photo[-1].file_id
-    report_data.time_spent = time_odds(
-        state_data.get('arrival_time'),
-        state_data.get('departure_time')
-    )
-    report_data.total_distance = total_distance(
-        state_data.get('odometer_reading'),
-        state_data.get('final_odometer')
-    )
-    report_data.fill_report(state_data)
     report_text = (
         f"Отчет по АВР:\n"
         f"Время выезда: {report_data.time_departure}\n"
@@ -602,7 +630,7 @@ async def process_picture_odometer3(message: Message, state: FSMContext):
         f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
         f"\n"
     )
-    await message.answer(report_text, reply_markup=main_kb)
+    await message.answer(report_text, main_kb)
     await state.clear()
 
 
@@ -1175,7 +1203,9 @@ async def finish_edit_picture_intermediate_odometer(message: Message, state: FSM
         f"Пройдено расстояния всего: {report_data.total_distance} км.\n"
         f"\n"
         f"Заполнено картинок: {report_data.count_filled_pictures()}\n"
-        f"Осталось заполнить картинок: {report_data.count_remaining_pictures()}\n"
+        f"Осталось заполнить картинок: {report_data.count_remaining_pictures()[0]}\n"
+        f"\n"
+        f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
         f"\n"
         f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
     )
