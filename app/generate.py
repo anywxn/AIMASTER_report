@@ -99,8 +99,4 @@ async def handle_q_command(message: types.Message, command: CommandObject):
     print(length)
 
 
-# Игнорировать все другие сообщения
-@genetare_router.message(F.text)
-async def ignore_other_messages(message: types.Message):
-    await message.reply(
-        "Пожалуйста, используйте команду /q для взаимодействия с ботом. Например: /q как восстановить режим сна")
+

@@ -348,7 +348,7 @@ async def process_report_text(message: Message):
         f"\n"
         f"Необходимо заполнить следующие картинки: {', '.join(report_data.count_remaining_pictures()[1])}\n"
         f"\n"
-        f"sНе забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
+        f"Не забудьте дополнить или изменить отчет, добавить картинки через клавиатуру!"
     )
     if user_id in user_report_data:
         await message.answer(report_text, reply_markup=main_kb)
@@ -565,6 +565,7 @@ async def process_picture_odometer3(message: Message, state: FSMContext):
         )
         report_data.fill_report(state_data)
         await finalize_report(message, state, user_id)
+        await state.clear()
     elif message.text == "/cancel":
         await state.clear()
         await message.answer("Процесс заполнения отчета отменен.")
@@ -634,7 +635,7 @@ async def finalize_report(message: Message, state: FSMContext, user_id):
     await state.clear()
 
 
-@routers.message(F.text.lower() == "создать отчет")
+@routers.message(F.text.lower() == "создать отчет в файле docx")
 async def create_report(message: Message):
     # Создание нового документа
     from main import bot
