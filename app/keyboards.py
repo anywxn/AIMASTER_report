@@ -57,3 +57,15 @@ main_kb = ReplyKeyboardMarkup(
 )
 
 
+skip_kb = ReplyKeyboardMarkup(
+    keyboard=[
+        [
+            KeyboardButton(text="/skip", callback_data="/skip"),
+            KeyboardButton(text="/cancel", callback_data="/cancel")
+        ],
+    ],
+    resize_keyboard=True,
+    one_time_keyboard=True,
+    input_field_placeholder="Выберете действие из меню",
+    selective=True,
+)

@@ -13,20 +13,22 @@ router = Router()
 # Функция для распознавания речи
 def recognize_speech(phrase_wav_path):
     r = sr.Recognizer()
-    hellow = sr.AudioFile(phrase_wav_path)
-    with hellow as source:
+    with sr.AudioFile(phrase_wav_path) as source:
         audio = r.record(source)
-        r.pause_threshold = 1
-        r.adjust_for_ambient_noise(source, duration=1)
+        r.pause_threshold = 0.8  # Установка порога паузы
+        r.adjust_for_ambient_noise(source, duration=1)  # Калибровка уровня шума
+
     try:
-        s = r.recognize_google(audio, language="ru-RU").lower()
-        print("Text: " + s)
-        result = s
-    except Exception as e:
-        print("Exception: " + str(e))
-        result = None
-    print('recognize_speech: ' + result)
-    return result
+        recognized_text = r.recognize_google(audio, language="ru-RU").lower()
+        print("Recognized Text: " + recognized_text)
+    except sr.UnknownValueError:
+        print("Speech Recognition could not understand audio")
+        recognized_text = None
+    except sr.RequestError as e:
+        print("Could not request results from Speech Recognition service; {0}".format(e))
+        recognized_text = None
+
+    return recognized_text
 
 
 # Обработчик команды /start
