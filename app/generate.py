@@ -1,9 +1,8 @@
 import logging
 import asyncio
 from aiogram.filters.command import CommandObject, Command
-from aiogram import types, F, Router
+from aiogram import types, Router
 import g4f
-
 
 logging.basicConfig(level=logging.INFO)
 genetare_router = Router()
@@ -12,7 +11,7 @@ genetare_router = Router()
 conversation_history = {}
 
 # Параметры для адаптивного управления
-MIN_DELAY = 0.5
+MIN_DELAY = 0.6
 MAX_DELAY = 2.0
 INCREMENT = 0.1
 
@@ -41,7 +40,7 @@ async def fetch_response_and_update_message(response_generator, chat_message):
 
     async for message in response_generator:
         token_buffer += message
-        if len(token_buffer) >= 10:  # Группировка по 10 токенов (можно изменить)
+        if len(token_buffer) >= 50:  # Группировка по 10 токенов (можно изменить)
             response_content += token_buffer
             try:
                 await chat_message.edit_text(response_content)
@@ -50,6 +49,7 @@ async def fetch_response_and_update_message(response_generator, chat_message):
                 if 'retry after' in str(e).lower():
                     delay = min(MAX_DELAY, delay + INCREMENT)  # Увеличиваем задержку при ошибке
                 else:
+                    logging.error(f"Error updating message: {e}")
                     raise e
             token_buffer = ""
             await asyncio.sleep(delay)
@@ -84,19 +84,16 @@ async def handle_q_command(message: types.Message, command: CommandObject):
             model=g4f.models.default,
             messages=chat_history,
             stream=True,
-            provider=g4f.Provider.DuckDuckGo,
+            provider=g4f.Provider.PerplexityLabs,
         )
         chat_message = await message.answer("...")
         chat_gpt_response = await fetch_response_and_update_message(response_generator, chat_message)
     except Exception as e:
-        print(f"{g4f.Provider.GeekGpt.__name__}:", e)
+        logging.error(f"{g4f.Provider.PerplexityLabs.__name__}:", e)
         chat_gpt_response = "Извините, произошла ошибка."
         await message.answer(chat_gpt_response)
 
     conversation_history[user_id].append({"role": "assistant", "content": chat_gpt_response})
-    print(conversation_history)
-    length = sum(len(message["content"]) for message in conversation_history[user_id])
-    print(length)
-
-
-
+    logging.info(conversation_history)
+    length = sum(len(msg["content"]) for msg in conversation_history[user_id])
+    logging.info(f"Total conversation length: {length}")

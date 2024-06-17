@@ -109,7 +109,13 @@ def normalize_time(time_str):
 def normalize_odometer(reading_str):
     # Убираем все символы, кроме цифр
     reading_digits = re.sub(r'\D', '', reading_str)
-    return reading_digits.zfill(6)  # Добавляем нули впереди, чтобы получить шестизначное число
+    # Если длина строки больше 6, обрезаем её до 6 символов
+    if len(reading_digits) > 6:
+        normalized_reading = reading_digits[:6]
+    else:
+        # Добавляем нули в конец, чтобы получить строку длиной 6 символов
+        normalized_reading = reading_digits.ljust(6, '0')
+    return normalized_reading
 
 
 async def extract_data(user_id, text):
