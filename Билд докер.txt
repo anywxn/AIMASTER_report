@@ -1,0 +1,26 @@
+СКАЧАТЬ ДОКЕР: https://www.docker.com/products/docker-desktop/
+ВКЛЮЧИТЬ ВИРТУАЛИЩАЦИЮ ЧЕРЕЗ КОМПОНЕНТЫ ВИНДОУС и в биосе тоже
+
+сначала зайти в командную строку через админа и перейти в папку с помощью cd, команды далее:
+Сборка контейнера:
+docker build -t masterReport:1.0 ./
+
+Посмотреть контейнеры:
+docker images
+
+Запустить контейнер:
+docker run "айди контейнера"
+
+
+докерфайл:
+
+FROM python:3.10-slim
+
+WORKDIR /bot
+
+COPY requirements.txt ./
+RUN pip install -r requirements.txt
+
+COPY . /bot
+
+CMD ["python", "main.py"]
